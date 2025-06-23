@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# VS Code
+.vscode/
+
+# macOS / Linux
+.DS_Store
+*.swp
+*~
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Testing / coverage
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# mypy / pylint / etc
+.mypy_cache/
+.pytype/
+.pytest_cache/
+
+#llm 
+cudnn-local-repo-ubuntu2404-9.10.1_1.0-1_amd64.deb
