@@ -106,10 +106,14 @@ class PoetryDB:
     def insert_biography(self,author_id,text,link):
         "Insert the biography for the author with ID"
         try:
+            is_present=self.get_author_biography(author_id)
+            if is_present is not None:
+                print(f'Author {author_id} already has a biography')
+                return None
             with self.conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO public.biogpahies (author_id,text,link)
+                    INSERT INTO public.biographies (author_id,text,link)
                     VALUES (%s, %s,%s)
                     RETURNING biography_id;
                     """,
@@ -133,7 +137,58 @@ class PoetryDB:
             result = cur.fetchone()
         return result[0] if result else None
         
-        
+    def get_all_authors(self) -> Optional[list[str]]:
+        "Returns a list of all of the authors in the database"
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT full_name FROM author;")
+            result = cur.fetchall()
+        return [row[0] for row in result] if result else None
+
+    def update_author(self, author_id, gender=None, place_of_birth=None, date_of_birth=None,
+                  date_of_death=None, place_of_death=None, full_name=None):
+        """
+        Updates only the non-None fields for a given author.
+        """
+        fields = []
+        values = []
+
+        if gender is not None:
+            fields.append("gender = %s")
+            values.append(gender)
+        if place_of_birth is not None:
+            fields.append("place_of_birth = %s")
+            values.append(place_of_birth)
+        if date_of_birth is not None:
+            fields.append("date_of_birth = %s")
+            values.append(date_of_birth)
+        if date_of_death is not None:
+            fields.append("date_of_death = %s")
+            values.append(date_of_death)
+        if place_of_death is not None:
+            fields.append("place_of_death = %s")
+            values.append(place_of_death)
+        if full_name is not None:
+            fields.append("full_name = %s")
+            values.append(full_name)
+
+        if not fields:
+            print(f"[INFO] No fields to update for author ID {author_id}.")
+            return
+
+        values.append(author_id)
+        query = f"UPDATE author SET {', '.join(fields)} WHERE id = %s;"
+
+        with self.conn.cursor() as cur:
+            cur.execute(query, tuple(values))
+
+        self.conn.commit()
+        print(f"[INFO] Updated author ID {author_id} with fields: {', '.join(f.split('=')[0].strip() for f in fields)}.")
+    def get_author_biography(self,author_id):
+        "Returns the authors biography"
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT text FROM biographies WHERE author_id = {author_id};")
+            result = cur.fetchone()
+        return result[0] if result else None  
     def insert_scraping_info(self,text_file_location:str,scraped_from:str):
         "Add information regarding the book."
         
@@ -164,5 +219,5 @@ class PoetryDB:
                 
             
 test=PoetryDB()
-test.insert_scraping_info("downloaded_books/scrape_log.txt","MiladionvckiBibliotekaSkopje")
+
             

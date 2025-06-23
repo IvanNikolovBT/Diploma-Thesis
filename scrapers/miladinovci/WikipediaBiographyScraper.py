@@ -133,9 +133,19 @@ class WikipediaScraper:
             
         return result
     def fill_missing_biographies(self):
-        
+        authors=self.db.get_all_authors()
+        for author in authors:
+            result=self.scrape(author)
+            if result is None:
+                print(f' Couldnt find author {author} on Wikipedia')
+            else:
+                author_id=self.db.get_author_id(author)
+                self.db.update_author(author_id,result["gender"],result["place_of_birth"],result['date_of_birth'],result['date_of_death'],result['place_of_death'])
+                self.db.insert_biography(author_id,result["full_text"],result["link"])
+                print(f'Succesfully updated author {author} with id {author_id}')
+                print(f"Succesfuly inserted dhis biography")
                 
 if __name__ == "__main__":
     scraper = WikipediaScraper()
-    data = scraper.scrape("Петре М. Андреевски")
-    pprint(data)
+    scraper.fill_missing_biographies()
+    
