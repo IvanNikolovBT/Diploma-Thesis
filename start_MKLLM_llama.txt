@@ -1,0 +1,5 @@
+./build/bin/llama-server \
+  --model /home/ivan/.cache/llama.cpp/NikolayKozloff_MKLLM-7B-Q8_0-GGUF_mkllm-7b-q8_0.gguf \
+  --port 8080 \
+  --n-gpu-layers 999 \
+  --ctx-size 2048

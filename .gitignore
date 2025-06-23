@@ -41,5 +41,12 @@ dist/
 .pytype/
 .pytest_cache/
 
-#llm 
+#llm  and llama cpp
 cudnn-local-repo-ubuntu2404-9.10.1_1.0-1_amd64.deb
+llama.cpp
+
+#images and pdfs
+downloaded_books
+pdfovi
+
+
