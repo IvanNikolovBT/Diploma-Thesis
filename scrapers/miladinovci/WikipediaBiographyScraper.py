@@ -1,23 +1,30 @@
+
 import re
+import sys
+import os
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote
+from pprint import pprint
+
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from poetry_DB import PoetryDB
 
 class WikipediaScraper:
     """
     A scraper for Macedonian Wikipedia biography pages.
-    Methods:
-      - find_mk_title(name): find page title via API
-      - scrape(name): scrape full text, infobox, demographics
     """
     WIKI_API = "https://mk.wikipedia.org/w/api.php"
     WIKI_BASE = "https://mk.wikipedia.org/wiki/"
 
+    def __init__(self):
+        self.db = PoetryDB()
+
     def find_mk_title(self, name: str) -> str | None:
-        """
-        Search Macedonian Wikipedia API for the given name.
-        Returns the best matching page title or None.
-        """
         params = {
             "action": "query",
             "format": "json",
@@ -31,12 +38,6 @@ class WikipediaScraper:
         return results[0]["title"] if results else None
 
     def scrape(self, name: str) -> dict | None:
-        """
-        Orchestrate scraping: find title, fetch page, parse content and demographics.
-        Returns a dict with keys:
-          - page_title, full_text, date_of_birth, place_of_birth,
-            date_of_death, place_of_death, gender, infobox
-        """
         title = self.find_mk_title(name)
         if not title:
             print(f"No Macedonian Wikipedia page found for '{name}'")
@@ -47,7 +48,6 @@ class WikipediaScraper:
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        
         content_div = soup.find("div", class_="mw-parser-output")
         texts = []
         for tag in content_div.find_all(["h2", "h3", "h4", "p", "li"]):
@@ -68,7 +68,6 @@ class WikipediaScraper:
                     infobox[key] = val
 
         dob = pob = pod = dod = gender = None
-
         if "Роден" in infobox:
             parts = [p.strip() for p in infobox["Роден"].split(",")]
             dob = parts[0]
@@ -80,11 +79,7 @@ class WikipediaScraper:
 
         if not (dob and pob and dod):
             pattern_full = re.compile(
-                r"\(\s*"
-                r"(?P<pob>.+?)\s*,\s*"
-                r"(?P<dob>\d{1,2}\s+\w+\s+\d{4})\s*—\s*"
-                r"(?P<pod>.+?)\s*,\s*"
-                r"(?P<dod>\d{1,2}\s+\w+\s+\d{4})\s*\)"
+                r"\(\s*(?P<pob>.+?)\s*,\s*(?P<dob>\d{1,2}\s+\w+\s+\d{4})\s*—\s*(?P<pod>.+?)\s*,\s*(?P<dod>\d{1,2}\s+\w+\s+\d{4})\s*\)"
             )
             m = pattern_full.search(first_para)
             if m:
@@ -95,9 +90,7 @@ class WikipediaScraper:
 
         if not (dob and pob):
             pattern_birth_only = re.compile(
-                r"\(\s*"
-                r"(?P<pob>.+?)\s*,\s*"
-                r"(?P<dob>\d{1,2}\s+\w+\s+\d{4})\s*\)"
+                r"\(\s*(?P<pob>.+?)\s*,\s*(?P<dob>\d{1,2}\s+\w+\s+\d{4})\s*\)"
             )
             m2 = pattern_birth_only.search(first_para)
             if m2:
@@ -126,7 +119,7 @@ class WikipediaScraper:
             elif re.search(r"\bРодена е\b", full_text):
                 gender = "Женско"
 
-        return {
+        result = {
             "page_title": title,
             "full_text": full_text,
             "date_of_birth": dob,
@@ -134,6 +127,15 @@ class WikipediaScraper:
             "date_of_death": dod,
             "place_of_death": pod,
             "gender": gender,
-            "infobox": infobox
+            "infobox": infobox,
+            "link":url
         }
-
+            
+        return result
+    def fill_missing_biographies(self):
+        
+                
+if __name__ == "__main__":
+    scraper = WikipediaScraper()
+    data = scraper.scrape("Петре М. Андреевски")
+    pprint(data)

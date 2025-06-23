@@ -103,6 +103,36 @@ class PoetryDB:
             print(f"[ERROR] Failed to insert book '{book_title}': {e}")
             return None
 
+    def insert_biography(self,author_id,text,link):
+        "Insert the biography for the author with ID"
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO public.biogpahies (author_id,text,link)
+                    VALUES (%s, %s,%s)
+                    RETURNING biography_id;
+                    """,
+                    (author_id, text,link)
+                )
+                biography_id: int = cur.fetchone()[0]
+            self.conn.commit()
+            print(f"Inserted biography for '{author_id}' from link {link}")
+            return biography_id
+        except Exception as e:
+            self.conn.rollback()
+            print(f"[ERROR] Failed to insert biography from link '{link}': {e}")
+            return None
+    def get_wiki_link_for_author(self, author_id: str) -> Optional[str]:
+        "Return the author’s id if found, otherwise None."
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT link FROM biographies WHERE author_id = %s;",
+                (author_id)
+            )
+            result = cur.fetchone()
+        return result[0] if result else None
+        
         
     def insert_scraping_info(self,text_file_location:str,scraped_from:str):
         "Add information regarding the book."
