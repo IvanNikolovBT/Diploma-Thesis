@@ -1,6 +1,6 @@
 import psycopg2
 from typing import Optional
-
+import re
 
 class PoetryDB:
     def __init__(self) -> None:
@@ -12,7 +12,7 @@ class PoetryDB:
         )
 
     def get_author_id(self, full_name: str) -> Optional[int]:
-        """Return the author’s id if found, otherwise None."""
+        "Return the author’s id if found, otherwise None."
         with self.conn.cursor() as cur:
             cur.execute(
                 "SELECT id FROM author WHERE full_name = %s;",
@@ -20,9 +20,21 @@ class PoetryDB:
             )
             result = cur.fetchone()
         return result[0] if result else None
+    
+    def get_book_with_author_id(self, author_id, title):
+        "Return the book_id of the book with the pair author_id and title"
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT book_id FROM book_table WHERE author_id = %s AND book_title = %s;",
+                (author_id, title)
+            )
+            result = cur.fetchone()
+        return result[0] if result else None
+
+        
 
     def insert_author(self, full_name: str) -> int:
-        """Insert a new author and return its generated id."""
+        "Insert a new author and return its generated id."
         with self.conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO author (full_name) VALUES (%s) RETURNING id;",
@@ -57,9 +69,7 @@ class PoetryDB:
                                 corpus: str,
                                 author_full_name: str
                                 ) -> None:
-        """
-        Ensure the author exists (insert if missing), then insert the song.
-        """
+        "Ensure the author exists (insert if missing), then insert the song."
         try:
             author_id = self.get_author_id(author_full_name)
             if author_id is None:
@@ -69,9 +79,60 @@ class PoetryDB:
             print("Error inserting song with author:", e)
 
     def close(self) -> None:
-        """Close the database connection."""
+        "Close the database connection."
         self.conn.close()
         
-    def insert_scraping_info(self,text_file_location:str):
-        pass 
+    def insert_book(self, author, book_title, date, page_link, scraped_from, object_label):
+        "Insert the book and return its ID"
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO public.book_table (author_id, book_title, scraped_from, link, date, object_label)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING book_id;
+                    """,
+                    (author, book_title, scraped_from, page_link, date, object_label)
+                )
+                book_id: int = cur.fetchone()[0]
+            self.conn.commit()
+            print(f"Book '{book_title}' inserted with ID {book_id} for author {author}")
+            return book_id
+        except Exception as e:
+            self.conn.rollback()
+            print(f"[ERROR] Failed to insert book '{book_title}': {e}")
+            return None
 
+        
+    def insert_scraping_info(self,text_file_location:str,scraped_from:str):
+        "Add information regarding the book."
+        
+        with open(text_file_location) as f:
+            
+            content=f.read()
+            page_links=re.findall("Page link: (.*)",content)
+            book_titles=re.findall("Book: (.*)",content)
+            object_labels=re.findall("Object Label: (.*)",content)
+            dates=re.findall("Date: (.*)",content)        
+            authors=re.findall("Author: (.*)",content)   
+            
+            
+            for i in range(len(page_links)):
+                author_id=self.get_author_id(authors[i])
+                if author_id is None:
+                    self.insert_author(authors[i])
+                else:
+                    print(f"1. Author {authors[i]} is already inserted. Going straight to book insertion")
+                book_id=self.get_book_with_author_id(author_id,book_titles[i])
+                if book_id is None:
+                    self.insert_book(author_id,book_titles[i],dates[i],page_links[i],scraped_from,object_labels[i])
+                else:
+                    print(f"Book with title {book_titles[i]} and author {authors[i]} is already inserted.")
+                
+                
+                    
+                
+            
+test=PoetryDB()
+test.insert_scraping_info("downloaded_books/scrape_log.txt","MiladionvckiBibliotekaSkopje")
+            
