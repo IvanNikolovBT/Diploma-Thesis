@@ -38,7 +38,7 @@ class ExtractorPipeline:
         for book_id in books:
             if book_id in present_books:
                 print(f'Book with id {book_id} is already proccessed. Skipping it.')
-                #continue
+                continue
             i=1
             file_path=f'{output_path}/{book_id}.txt'
             with open(file_path,'a') as f:
@@ -51,7 +51,7 @@ class ExtractorPipeline:
                     raw_text=self.extract_test_raw(image_path)
                     print(raw_text)
                     f.write(raw_text)
-            
+    
                         
         
 test=ExtractorPipeline()
