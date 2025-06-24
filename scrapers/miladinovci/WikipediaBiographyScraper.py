@@ -143,7 +143,7 @@ class WikipediaScraper:
                 self.db.update_author(author_id,result["gender"],result["place_of_birth"],result['date_of_birth'],result['date_of_death'],result['place_of_death'])
                 self.db.insert_biography(author_id,result["full_text"],result["link"])
                 print(f'Succesfully updated author {author} with id {author_id}')
-                print(f"Succesfuly inserted dhis biography")
+                print(f"Succesfuly inserted the biography")
                 
 if __name__ == "__main__":
     scraper = WikipediaScraper()

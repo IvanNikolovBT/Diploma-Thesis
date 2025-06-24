@@ -106,6 +106,7 @@ class PoetryDB:
     def insert_biography(self,author_id,text,link):
         "Insert the biography for the author with ID"
         try:
+            
             is_present=self.get_author_biography(author_id)
             if is_present is not None:
                 print(f'Author {author_id} already has a biography')
