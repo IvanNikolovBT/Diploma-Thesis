@@ -1,9 +1,10 @@
 
 from PIL import Image
-import pytesseract
+
 from poetry_DB import PoetryDB
-import os
-import re
+import re,sys,os,pytesseract
+
+
 class ExtractorPipeline:
     
     def __init__(self):
