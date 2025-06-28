@@ -237,7 +237,7 @@ class PoetryDB:
     def get_kik_song_id(self,song_name:str):
         "Returns the kik song"
         with self.conn.cursor() as cur:
-            cur.execute(f"SELECT id  FROM song_kafe_kniga WHERE song_title = {song_name};")
+            cur.execute("SELECT id FROM song_kafe_kniga WHERE song_title = %s", (song_name,))
             result = cur.fetchone()
         return result[0] if result else None  
 

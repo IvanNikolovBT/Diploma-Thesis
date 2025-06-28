@@ -78,31 +78,55 @@ class KafeIKnigiScraper:
         for link in self.all_links:
             print(link)
 
-    def extract_info(self,page_link:str):
-        
-        with open(page_link,"r",encoding='utf-8') as f: 
-            html=f.read()
-        soup=BeautifulSoup(html,'html.parser')
-        title_tag=soup.find('h1',class_="entry-title")
+    def extract_info(self, url: str):
+        """
+        Fetch HTML from URL and extract song info.
+        """
+        response = requests.get(url)
+        response.raise_for_status()
+        html = response.text
+
+        soup = BeautifulSoup(html, 'html.parser')
+        title_tag = soup.find('h1', class_="entry-title")
         title = title_tag.get_text(strip=True) if title_tag else "N/A"
+      
+
+        pattern = r'Македонска поезија: „(.+)“ од ([А-Ша-шЃЌЏ\s]+)'
+        matches = re.match(pattern, title)
+        if not matches:
+            print(f"[WARNING] Title pattern didn't match for URL {url}, skipping.")
+            return
         
-        pattern=r'Македонска поезија: „(.+)“ од ([А-Ша-шЃЌЏ\s]+)'
-        matches=re.match(pattern,title)
-        song_name,author=matches[1],matches[2]
-        content=soup.find('div','entry-content')
-        
+        song_name, author = matches[1], matches[2]
+        content = soup.find('div', 'entry-content')
         context = content.find("p").get_text(strip=True) if content else None
         paragraphs = content.find_all("p")[1:] if content else []
-        song=""
+
+        song = ""
         for p in paragraphs:
             text = p.get_text(separator="\n", strip=True)
-            song += text + "\n\n"  
+            song += text + "\n\n"
 
-        self.db.insert_kik_song(author,song_name,context,song)
+        self.db.insert_kik_song(author, song_name, context, song)
+    def scrape_and_extract_all(self):
+        """
+        Read links from file and extract info from each URL.
+        """
+        links_file = "/home/ivan/Desktop/Diplomska/scrapers/kafeiknigi/all_links.txt"
         
+        with open(links_file, "r", encoding="utf-8") as f:
+            self.all_links = [line.strip() for line in f if line.strip()]
 
+        for i, link in enumerate(self.all_links, start=1):
+            print(f"Processing link {i}/{len(self.all_links)}: {link}")
+            try:
+                self.extract_info(link)
+            except Exception as e:
+                print(f"[ERROR] Failed to extract info from {link}: {e}")
+            time.sleep(self.delay)
 test=KafeIKnigiScraper()
-test.extract_info("/home/ivan/Desktop/Diplomska/scrapers/kafeiknigi/template.html")       
+
+test.scrape_and_extract_all()
 
 
 
