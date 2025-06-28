@@ -7,7 +7,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from poetry_DB import 
+from poetry_DB import PoetryDB
 class KafeIKnigiScraper:
     BASE_URL = "https://kafeiknigi.com/category/%D0%BF%D0%BE%D0%B5%D0%BC%D0%B8-2/"
 
@@ -17,7 +17,7 @@ class KafeIKnigiScraper:
         """
         self.delay = delay
         self.all_links = []
-
+        self.db=PoetryDB()
     def _get_links_from_page(self, page_num: int) -> list[str]:
         """
         Fetch thumbnail links from a given category page.
@@ -38,7 +38,8 @@ class KafeIKnigiScraper:
 
     def scrape(self):
         """
-        Scrape all paginated links until no more are found.
+        Scrape all paginated links until no more are found,
+        then save them to 'all_links.txt'.
         """
         page = 1
 
@@ -54,9 +55,15 @@ class KafeIKnigiScraper:
             page += 1
             time.sleep(self.delay)
 
-        
         self.all_links = list(dict.fromkeys(self.all_links))
-    
+
+        
+        with open("all_links.txt", "w", encoding="utf-8") as f:
+            for link in self.all_links:
+                f.write(link + "\n")
+
+        print(f"Saved {len(self.all_links)} unique links to 'all_links.txt'.")
+
     def get_links(self) -> list[str]:
         """
         Return the collected unique links.
@@ -78,23 +85,20 @@ class KafeIKnigiScraper:
         soup=BeautifulSoup(html,'html.parser')
         title_tag=soup.find('h1',class_="entry-title")
         title = title_tag.get_text(strip=True) if title_tag else "N/A"
-        print(title)
+        
         pattern=r'Македонска поезија: „(.+)“ од ([А-Ша-шЃЌЏ\s]+)'
         matches=re.match(pattern,title)
         song_name,author=matches[1],matches[2]
-        print(f'Song_name: {song_name}')
-        print(f'Author: {author}')
         content=soup.find('div','entry-content')
         
         context = content.find("p").get_text(strip=True) if content else None
-        print(f'Context: {context}')
         paragraphs = content.find_all("p")[1:] if content else []
         song=""
         for p in paragraphs:
             text = p.get_text(separator="\n", strip=True)
             song += text + "\n\n"  
 
-        print(song.strip())
+        self.db.insert_kik_song(author,song_name,context,song)
         
 
 test=KafeIKnigiScraper()

@@ -215,10 +215,34 @@ class PoetryDB:
                 else:
                     print(f"Book with title {book_titles[i]} and author {authors[i]} is already inserted.")
                 
-                
-                    
-                
+    def insert_kik_song(self, author_name: str, song_name: str, context: str, song_text: str):
+        with self.conn.cursor() as cur:
+            author_id = self.get_author_id(author_name)
+            if author_id is None:
+                self.insert_author(author_name)
             
-test=PoetryDB()
+            song_id=self.get_kik_song_id(song_name)
+            if song_id is None:
+                cur.execute("""
+                    INSERT INTO song_kafe_kniga (author,author_id, context, song_title, song_text)
+                    VALUES (%s,%s, %s, %s, %s)
+                """, (author_name,author_id, context, song_name, song_text))
+                self.conn.commit()
+                print(f"Inserted '{song_name}' by {author_name}.")
+            
+            else:
+                print(f'Song {song_name} already has id {song_id}')
+                
+        
+    def get_kik_song_id(self,song_name:str):
+        "Returns the kik song"
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT id  FROM song_kafe_kniga WHERE song_title = {song_name};")
+            result = cur.fetchone()
+        return result[0] if result else None  
+
+            
+            
+                
 
             
