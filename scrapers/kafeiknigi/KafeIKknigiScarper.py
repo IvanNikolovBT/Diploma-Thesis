@@ -91,7 +91,7 @@ class KafeIKnigiScraper:
         title = title_tag.get_text(strip=True) if title_tag else "N/A"
       
 
-        pattern = r'Македонска поезија: „(.+)“ од ([А-Ша-шЃЌЏ\s]+)'
+        pattern = r'Македонска поезија: „(.+?)“ од ([\w\s]+)'
         matches = re.match(pattern, title)
         if not matches:
             print(f"[WARNING] Title pattern didn't match for URL {url}, skipping.")
@@ -124,6 +124,10 @@ class KafeIKnigiScraper:
             except Exception as e:
                 print(f"[ERROR] Failed to extract info from {link}: {e}")
             time.sleep(self.delay)
+            
+    def fill_author_table(self):
+        
+        
 test=KafeIKnigiScraper()
 
 test.scrape_and_extract_all()
