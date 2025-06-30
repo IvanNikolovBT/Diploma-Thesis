@@ -125,8 +125,6 @@ class KafeIKnigiScraper:
                 print(f"[ERROR] Failed to extract info from {link}: {e}")
             time.sleep(self.delay)
             
-    def fill_author_table(self):
-        
         
 test=KafeIKnigiScraper()
 

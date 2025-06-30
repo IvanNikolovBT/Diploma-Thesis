@@ -31,8 +31,6 @@ class PoetryDB:
             result = cur.fetchone()
         return result[0] if result else None
 
-        
-
     def insert_author(self, full_name: str) -> int:
         "Insert a new author and return its generated id."
         with self.conn.cursor() as cur:
@@ -219,7 +217,7 @@ class PoetryDB:
         with self.conn.cursor() as cur:
             author_id = self.get_author_id(author_name)
             if author_id is None:
-                self.insert_author(author_name)
+                author_id=self.insert_author(author_name)
             
             song_id=self.get_kik_song_id(song_name)
             if song_id is None:
@@ -241,7 +239,6 @@ class PoetryDB:
             result = cur.fetchone()
         return result[0] if result else None  
 
-            
             
                 
 
