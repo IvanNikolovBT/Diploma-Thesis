@@ -47,10 +47,8 @@ llama.cpp
 
 #images and pdfs
 downloaded_books
-pdfovi
 
 #song txt files
-extracted_books_from_images
 
 #tokens
 token.txt
