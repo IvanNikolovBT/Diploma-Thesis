@@ -240,6 +240,26 @@ class PoetryDB:
         return result[0] if result else None  
 
             
+    def insert_word_information_o_tolkoven(self, title: str, pos_tags: str, text: str):
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO o_tolkoven (title, pos_tags, full_text)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (title, pos_tags) DO NOTHING
+                    RETURNING id;
+                """, (title, pos_tags, text))
                 
+                inserted = cur.fetchone()
+                self.conn.commit()
 
-            
+                if inserted:
+                    print(f"Inserted new entry with ID {inserted[0]}")
+                else:
+                    print(f"Skipped: Entry with title='{title}' and pos_tags='{pos_tags}' already exists.")
+
+        except Exception as e:
+            print("Database error:", e)
+
+
+                
