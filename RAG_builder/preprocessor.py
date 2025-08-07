@@ -8,7 +8,6 @@ import pytesseract
 from typing import Dict, List
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PDFMinerLoader
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from poetry_DB import PoetryDB
 
