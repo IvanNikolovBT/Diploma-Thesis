@@ -200,7 +200,7 @@ if __name__ == "__main__":
                     logger.info("Running test query...")
                     results = collection.query(
                         query_texts=["Македонска народна песна"],
-                        n_results=3,
+                        n_results=20,
                         where={"author_full_name": {"$ne": ""}}  # Filter out empty authors
                     )
                     
