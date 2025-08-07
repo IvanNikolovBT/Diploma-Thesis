@@ -52,3 +52,6 @@ downloaded_books
 
 #tokens
 token.txt
+
+#vectordb
+vector_db/chroma.sqlite3
