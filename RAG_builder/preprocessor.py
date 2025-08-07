@@ -29,13 +29,17 @@ class Preprocessor:
         self.db = PoetryDB()
 
     def _add_chunk_sequence_meta(self, chunks: List[Document]) -> List[Document]:
-        
+        """Adds sequential metadata to chunks with no None values.
+        Uses 0 to indicate no previous/next chunk (instead of None)."""
         for i, chunk in enumerate(chunks):
+            
+            book_id = chunk.metadata.get('book_id', 'unknown')
+            
             chunk.metadata.update({
                 "chunk_seq": i + 1,
                 "total_chunks": len(chunks),
-                "prev_chunk_id": f"{chunk.metadata['book_id']}_chunk{i}" if i > 0 else None,
-                "next_chunk_id": f"{chunk.metadata['book_id']}_chunk{i+2}" if i < len(chunks)-1 else None
+                "prev_chunk_id": f"{book_id}_chunk{i}" if i > 0 else f"{book_id}_chunk0",
+                "next_chunk_id": f"{book_id}_chunk{i+2}" if i < len(chunks)-1 else f"{book_id}_chunk0",
             })
         return chunks
 
@@ -55,7 +59,8 @@ class Preprocessor:
 
                 book_id = m.group(1)
                 book_info = self.db.get_book_info_by_id_in_link(book_id)
-                
+                if book_id=='274':
+                    print('TUKA SME')
                 base_metadata = {
                     "file_name": file_path.name,
                     "book_id": book_info['book_id'],
@@ -152,10 +157,12 @@ class Preprocessor:
                 "pdf_page_count": len(pdf.pages)
             }
 
+   
+""" 
 processor = Preprocessor()
 contents = processor.load_txt()
 
-
+   
 book_393_chunks = contents['393']
 print(f"Book 393 has {len(book_393_chunks)} chunks")
 for i, chunk in enumerate(book_393_chunks[:3]):  
@@ -164,8 +171,7 @@ for i, chunk in enumerate(book_393_chunks[:3]):
     print(f"Prev: {chunk.metadata['prev_chunk_id']}")
     print(f"Next: {chunk.metadata['next_chunk_id']}")
     print(chunk.page_content[:100] + "...")
-    
-    
+   
 pdf_chunks = processor.load_pdf(Path("pdfovi/MIladinovci/9.pdf"))
 
 
@@ -175,4 +181,4 @@ print(pdf_chunks[0].metadata.keys())
 
 print("\nPDF technical metadata:")
 print(f"Creator: {pdf_chunks[0].metadata['pdf_creator']}")
-print(f"Page size: {pdf_chunks[0].metadata['pdf_page_size']}")
+print(f"Page size: {pdf_chunks[0].metadata['pdf_page_size']}")"""
