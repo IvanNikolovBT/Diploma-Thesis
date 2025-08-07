@@ -1,6 +1,9 @@
 import psycopg2
 from typing import Optional
 import re
+from psycopg2.extras import RealDictCursor
+
+
 
 class PoetryDB:
     def __init__(self) -> None:
@@ -260,6 +263,66 @@ class PoetryDB:
 
         except Exception as e:
             print("Database error:", e)
+            
+    def get_all_book_info(self, book_id: str) -> dict | None:
+            try:
+                with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            b.book_id,
+                            b.book_title,
+                            b.author_id,
+                            b.date,
+                            b.link,
+                            b.object_label,
+                            a.full_name,
+                            bio.text AS author_biography
+                        FROM book_table AS b
+                        JOIN author AS a ON b.author_id = a.id
+                        LEFT JOIN biographies AS bio ON a.id = bio.author_id
+                        WHERE b.book_id = %s;
+                        """,
+                        (book_id,),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        return None
 
-
-                
+                    return {
+                        "book_title": row["book_title"],
+                        "author_id": row["author_id"],
+                        "author_full_name": row["full_name"],
+                        "author_biography": row.get("author_biography"),  
+                        "date": row["date"],
+                        "object_label": row["object_label"],
+                    }
+            except Exception as e:
+                print("Database error:", e)
+                raise
+     
+    def get_book_info_by_id_in_link(self, book_id_from_miladinovci: str) -> dict | None:
+        try:
+            with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        b.book_id,
+                        b.book_title,
+                        b.author_id,
+                        b.date,
+                        b.link,
+                        b.object_label,
+                        a.full_name,
+                        bio.text AS author_biography
+                    FROM book_table AS b
+                    JOIN author AS a ON b.author_id = a.id
+                    LEFT JOIN biographies AS bio ON a.id = bio.author_id
+                    WHERE b.link LIKE %s;
+                    """,
+                    (f"%{book_id_from_miladinovci}%",),
+                )
+                return cur.fetchone()  # None if no match
+        except Exception as e:
+            print("Database error:", e)
+            raise               
