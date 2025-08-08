@@ -11,8 +11,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from poetry_DB import PoetryDB
 
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+CHUNK_SIZE = 600
+CHUNK_OVERLAP = 100
 OCR_DPI = 300
 
 class Preprocessor:
@@ -29,8 +29,6 @@ class Preprocessor:
         self.db = PoetryDB()
 
     def _add_chunk_sequence_meta(self, chunks: List[Document]) -> List[Document]:
-        """Adds sequential metadata to chunks with no None values.
-        Uses 0 to indicate no previous/next chunk (instead of None)."""
         for i, chunk in enumerate(chunks):
             
             book_id = chunk.metadata.get('book_id', 'unknown')
@@ -59,8 +57,7 @@ class Preprocessor:
 
                 book_id = m.group(1)
                 book_info = self.db.get_book_info_by_id_in_link(book_id)
-                if book_id=='274':
-                    print('TUKA SME')
+
                 base_metadata = {
                     "file_name": file_path.name,
                     "book_id": book_info['book_id'],

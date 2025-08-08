@@ -55,3 +55,4 @@ token.txt
 
 #vectordb
 vector_db/chroma.sqlite3
+vector_db
