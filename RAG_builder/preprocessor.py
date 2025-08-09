@@ -35,58 +35,45 @@ class Preprocessor:
         self.db = PoetryDB()"""
     def __init__(
         self,
-        breakpoint_threshold: float = 0.8,
-        model_name: str = "Xenova/multilingual-e5-base",
+        breakpoint_threshold: float = 0.95,
+        model_name: str = "Xenova/multiligual-e5-base",
         ocr_if_needed: bool = True
     ):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        # 4-bit quantization config (reduces size by ~8x)
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4"
-        )
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+    
 
-        try:
+            model_name = "sentence-transformers/all-MiniLM-L6-v2"  
+        
+       
+            # 4-bit quantization (~110MB)
+            quant_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16
+            )
             
-            
-            # Load quantized model (~420MB)
             model = AutoModel.from_pretrained(
                 model_name,
                 device_map="auto",
                 quantization_config=quant_config
             )
             
-            # Initialize embeddings
             self.embeddings = HuggingFaceEmbeddings(
                 model_name=model_name,
-                model_kwargs={
-                    "device": self.device,
-                    "trust_remote_code": True
-                },
-                encode_kwargs={
-                    "batch_size": 1 if self.device == "cuda" else 4,
-                    "normalize_embeddings": True
-                }
+                model_kwargs={"device": self.device},
+                encode_kwargs={"batch_size": 8}
+            )
+            self.embeddings.client._modules['0'].auto_model = model
+      
+                
+
+            # Initialize chunker
+            self.splitter = SemanticChunker(
+                embeddings=self.embeddings,
+                breakpoint_threshold_amount=breakpoint_threshold
             )
             
-            # Inject our quantized model
-            self.embeddings.client._modules['0'].auto_model = model
-            
-            logger.info(f"Loaded quantized {model_name} (~420MB)")
-        except Exception as e:
-            logger.error(f"Quantized loading failed: {e}")
-            
-
-        # Initialize chunker
-        self.splitter = SemanticChunker(
-            embeddings=self.embeddings,
-            breakpoint_threshold_amount=breakpoint_threshold
-        )
-        
-        self.ocr_if_needed = ocr_if_needed
-        self.db = PoetryDB()    
+            self.ocr_if_needed = ocr_if_needed
+            self.db = PoetryDB()    
     def _get_safe_device(self) -> str:
         """Get available device with proper error handling"""
         if not torch.cuda.is_available():
@@ -233,14 +220,14 @@ start=time.time()
 contents = processor.load_txt()
 print(f'Duration {time.time()-start} seconds for all semantic')
    
-book_393_chunks = contents['393']
-print(f"Book 393 has {len(book_393_chunks)} chunks")
-for i, chunk in enumerate(book_393_chunks[:3]):  
+book_393_chunks = contents['1']
+print(f"Book 1has {len(book_393_chunks)} chunks")
+for i, chunk in enumerate(book_393_chunks[:30]):  
     print(f"\nChunk {i+1}/{len(book_393_chunks)}")
     print(f"Sequence: {chunk.metadata['chunk_seq']} of {chunk.metadata['total_chunks']}")
     print(f"Prev: {chunk.metadata['prev_chunk_id']}")
     print(f"Next: {chunk.metadata['next_chunk_id']}")
-    print(chunk.page_content[:100] + "...")
+    print(chunk.page_content[:100] + "")
    
 """pdf_chunks = processor.load_pdf(Path("pdfovi/MIladinovci/9.pdf"))
 
