@@ -8,15 +8,21 @@ import pytesseract
 from typing import Dict, List
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_experimental.text_splitter import SemanticChunker
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from poetry_DB import PoetryDB
-
+from langchain_community.embeddings import HuggingFaceEmbeddings
+import torch
+import logging
+import time
+from transformers import AutoModel, BitsAndBytesConfig, AutoTokenizer
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 100
 OCR_DPI = 300
-
+logging.basicConfig(level=logging.INFO)  
+logger = logging.getLogger(__name__)
 class Preprocessor:
-    def __init__(self,
+    """def __init__(self,
                  chunk_size: int = CHUNK_SIZE,
                  chunk_overlap: int = CHUNK_OVERLAP,
                  ocr_if_needed: bool = True):
@@ -26,7 +32,73 @@ class Preprocessor:
             separators=["\n\n", "\n", " ", ""]  
         )
         self.ocr_if_needed = ocr_if_needed
-        self.db = PoetryDB()
+        self.db = PoetryDB()"""
+    def __init__(
+        self,
+        breakpoint_threshold: float = 0.8,
+        model_name: str = "Xenova/multilingual-e5-base",
+        ocr_if_needed: bool = True
+    ):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # 4-bit quantization config (reduces size by ~8x)
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4"
+        )
+
+        try:
+            
+            
+            # Load quantized model (~420MB)
+            model = AutoModel.from_pretrained(
+                model_name,
+                device_map="auto",
+                quantization_config=quant_config
+            )
+            
+            # Initialize embeddings
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name=model_name,
+                model_kwargs={
+                    "device": self.device,
+                    "trust_remote_code": True
+                },
+                encode_kwargs={
+                    "batch_size": 1 if self.device == "cuda" else 4,
+                    "normalize_embeddings": True
+                }
+            )
+            
+            # Inject our quantized model
+            self.embeddings.client._modules['0'].auto_model = model
+            
+            logger.info(f"Loaded quantized {model_name} (~420MB)")
+        except Exception as e:
+            logger.error(f"Quantized loading failed: {e}")
+            
+
+        # Initialize chunker
+        self.splitter = SemanticChunker(
+            embeddings=self.embeddings,
+            breakpoint_threshold_amount=breakpoint_threshold
+        )
+        
+        self.ocr_if_needed = ocr_if_needed
+        self.db = PoetryDB()    
+    def _get_safe_device(self) -> str:
+        """Get available device with proper error handling"""
+        if not torch.cuda.is_available():
+            return "cpu"
+        
+        try:
+            # Test actual GPU functionality
+            torch.zeros(1).to("cuda")
+            return "cuda"
+        except RuntimeError as e:
+            print(f"CUDA available but not usable: {e}")
+            return "cpu"
 
     def _add_chunk_sequence_meta(self, chunks: List[Document]) -> List[Document]:
         for i, chunk in enumerate(chunks):
@@ -155,10 +227,11 @@ class Preprocessor:
             }
 
    
-""" 
-processor = Preprocessor()
-contents = processor.load_txt()
 
+processor = Preprocessor()
+start=time.time()
+contents = processor.load_txt()
+print(f'Duration {time.time()-start} seconds for all semantic')
    
 book_393_chunks = contents['393']
 print(f"Book 393 has {len(book_393_chunks)} chunks")
@@ -169,7 +242,7 @@ for i, chunk in enumerate(book_393_chunks[:3]):
     print(f"Next: {chunk.metadata['next_chunk_id']}")
     print(chunk.page_content[:100] + "...")
    
-pdf_chunks = processor.load_pdf(Path("pdfovi/MIladinovci/9.pdf"))
+"""pdf_chunks = processor.load_pdf(Path("pdfovi/MIladinovci/9.pdf"))
 
 
 print(pdf_chunks)

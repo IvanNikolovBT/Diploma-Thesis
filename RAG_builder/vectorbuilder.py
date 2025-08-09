@@ -8,8 +8,8 @@ import chromadb
 from preprocessor import Preprocessor
 import logging
 import time 
-# Configure logging
-logging.basicConfig(level=logging.INFO)  # Changed to DEBUG for more detailed output
+
+logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
 
 class VectorDBBuilder:
@@ -37,6 +37,7 @@ class VectorDBBuilder:
                     is_persistent=True
                 )
             )
+            self.preprocessor=Preprocessor()
             
         except Exception as e:
             logger.error(f"Initialization failed: {e}")
@@ -57,13 +58,6 @@ class VectorDBBuilder:
             else:
                 cleaned[key] = value
         return cleaned
-
-    def _log_problematic_metadata(self, metadata: Dict[str, Any]):
-        """Log detailed information about problematic metadata"""
-        problematic_fields = {k: v for k, v in metadata.items() if v is None}
-        if problematic_fields:
-            logger.debug(f"Problematic metadata fields: {problematic_fields}")
-            logger.debug(f"Complete metadata: {metadata}")
 
     def create_vector_db(self, 
                     documents: Union[Dict[str, List[Document]], List[Document]], 
@@ -132,7 +126,7 @@ class VectorDBBuilder:
             for i in range(0, total_chunks, batch_size):
                 batch = all_chunks[i:i + batch_size]
                 try:
-                    # Prepare batch data
+
                     documents_batch = []
                     metadatas_batch = []
                     ids_batch = []
