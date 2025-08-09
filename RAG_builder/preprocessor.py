@@ -22,7 +22,7 @@ OCR_DPI = 300
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
 class Preprocessor:
-    """def __init__(self,
+    def __init__(self,
                  chunk_size: int = CHUNK_SIZE,
                  chunk_overlap: int = CHUNK_OVERLAP,
                  ocr_if_needed: bool = True):
@@ -32,48 +32,7 @@ class Preprocessor:
             separators=["\n\n", "\n", " ", ""]  
         )
         self.ocr_if_needed = ocr_if_needed
-        self.db = PoetryDB()"""
-    def __init__(
-        self,
-        breakpoint_threshold: float = 0.95,
-        model_name: str = "Xenova/multiligual-e5-base",
-        ocr_if_needed: bool = True
-    ):
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-
-            model_name = "sentence-transformers/all-MiniLM-L6-v2"  
-        
-       
-            # 4-bit quantization (~110MB)
-            quant_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16
-            )
-            
-            model = AutoModel.from_pretrained(
-                model_name,
-                device_map="auto",
-                quantization_config=quant_config
-            )
-            
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name=model_name,
-                model_kwargs={"device": self.device},
-                encode_kwargs={"batch_size": 8}
-            )
-            self.embeddings.client._modules['0'].auto_model = model
-      
-                
-
-            # Initialize chunker
-            self.splitter = SemanticChunker(
-                embeddings=self.embeddings,
-                breakpoint_threshold_amount=breakpoint_threshold
-            )
-            
-            self.ocr_if_needed = ocr_if_needed
-            self.db = PoetryDB()    
+        self.db = PoetryDB()
     def _get_safe_device(self) -> str:
         """Get available device with proper error handling"""
         if not torch.cuda.is_available():
@@ -227,7 +186,9 @@ for i, chunk in enumerate(book_393_chunks[:30]):
     print(f"Sequence: {chunk.metadata['chunk_seq']} of {chunk.metadata['total_chunks']}")
     print(f"Prev: {chunk.metadata['prev_chunk_id']}")
     print(f"Next: {chunk.metadata['next_chunk_id']}")
-    print(chunk.page_content[:100] + "")
+    print('\n\n')
+    
+    print(chunk.page_content)
    
 """pdf_chunks = processor.load_pdf(Path("pdfovi/MIladinovci/9.pdf"))
 
