@@ -15,7 +15,10 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 import torch
 import logging
 import time
-from transformers import AutoModel, BitsAndBytesConfig, AutoTokenizer
+
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 100
 OCR_DPI = 300
@@ -33,6 +36,8 @@ class Preprocessor:
         )
         self.ocr_if_needed = ocr_if_needed
         self.db = PoetryDB()
+        
+        
     def _get_safe_device(self) -> str:
         """Get available device with proper error handling"""
         if not torch.cuda.is_available():
@@ -157,7 +162,27 @@ class Preprocessor:
             print(f"PDF processing failed for {path}: {e}")
         
         return docs
+    def load_all_pdfs(self, directory_path: str = "pdfovi/MIladinovci") -> List[Document]:
+        all_documents = []
+        directory = Path(directory_path)
+        
+        for file_path in directory.glob('*.pdf'):
+            try:
 
+                documents = self.load_pdf(file_path)
+                
+                if documents:  
+                    all_documents.extend(documents)
+                    logger.info(f"Processed {file_path.name}: {len(documents)} chunks")
+                else:
+                    logger.warning(f"No valid content extracted from {file_path.name}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to process {file_path.name}: {str(e)}")
+                continue
+                
+        logger.info(f"Loaded {len(all_documents)} total chunks from {sum(1 for _ in directory.glob('*.pdf'))} PDFs")
+        return all_documents
     def _get_pdf_metadata(self, path: Path) -> Dict:
         """Extract PDF-specific metadata"""
         with pdfplumber.open(path) as pdf:
@@ -171,10 +196,10 @@ class Preprocessor:
                 "pdf_version": pdf.metadata.get("PDFVersion", ""),
                 "pdf_page_count": len(pdf.pages)
             }
-
-   
+    
 
 processor = Preprocessor()
+"""
 start=time.time()
 contents = processor.load_txt()
 print(f'Duration {time.time()-start} seconds for all semantic')
@@ -188,8 +213,11 @@ for i, chunk in enumerate(book_393_chunks[:30]):
     print(f"Next: {chunk.metadata['next_chunk_id']}")
     print('\n\n')
     
-    print(chunk.page_content)
-   
+    print(chunk.page_content)"""
+"""pdfs=processor.load_all_pdfs()  
+for pdf in pdfs[:3]:
+    print(pdf)
+    """
 """pdf_chunks = processor.load_pdf(Path("pdfovi/MIladinovci/9.pdf"))
 
 

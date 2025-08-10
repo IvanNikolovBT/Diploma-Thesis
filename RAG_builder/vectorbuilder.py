@@ -8,7 +8,8 @@ import chromadb
 from preprocessor import Preprocessor
 import logging
 import time 
-
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
 
@@ -20,14 +21,10 @@ class VectorDBBuilder:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Using device: {self.device.upper()}")
             
-            self.embedding_model = HuggingFaceEmbeddings(
-                model_name=embedding_model,
-                model_kwargs={"device": self.device},
-                encode_kwargs={
-                    "normalize_embeddings": True,
-                    "batch_size": 512 if self.device == "cuda" else 128
-                }
-            )
+            self.model = SentenceTransformer(
+            'sentence-transformers/all-MiniLM-L6-v2',
+            device='cpu'
+        )
             
             self.client = chromadb.PersistentClient(
                 path="vector_db",
@@ -110,7 +107,7 @@ class VectorDBBuilder:
                 metadata={
                     "hnsw:space": "cosine",
                     "device": self.device,
-                    "model": self.embedding_model.model_name
+                    "model": "all-MiniLM-L6-v2"
                 }
             )
 
@@ -136,7 +133,7 @@ class VectorDBBuilder:
                             continue
                         if not hasattr(chunk, 'page_content') or not chunk.page_content:
                             continue
-                        
+                    
                         cleaned_metadata = self._clean_and_validate_metadata(chunk.metadata)
                         documents_batch.append(chunk.page_content)
                         metadatas_batch.append(cleaned_metadata)
@@ -180,7 +177,7 @@ if __name__ == "__main__":
         logger.info("Loading text documents...")
         txt_contents = {}
         try:
-            txt_contents = processor.load_txt()
+            txt_contents = processor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
             if not txt_contents:
                 logger.error("No text documents loaded")
             else:
