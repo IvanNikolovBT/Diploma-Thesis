@@ -56,3 +56,5 @@ token.txt
 #vectordb
 vector_db/chroma.sqlite3
 vector_db
+
+all-MiniLM-L6-v2.F16.gguf

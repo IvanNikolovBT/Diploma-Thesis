@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class VectorDBBuilder:
-    def __init__(self, embedding_model: str = "intfloat/multilingual-e5-large"):
+    def __init__(self, embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"):
 
         try:
             
