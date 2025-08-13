@@ -6,7 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 from pprint import pprint
-
+import wikipedia
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 if PROJECT_ROOT not in sys.path:
@@ -55,7 +55,6 @@ class WikipediaScraper:
             if txt:
                 texts.append(txt)
         full_text = "\n".join(texts)
-        first_para = texts[0] if texts else ""
 
         infobox = {}
         tbl = soup.find("table", class_="infobox")
@@ -67,66 +66,9 @@ class WikipediaScraper:
                     val = " ".join(td.stripped_strings)
                     infobox[key] = val
 
-        dob = pob = pod = dod = gender = None
-        if "Роден" in infobox:
-            parts = [p.strip() for p in infobox["Роден"].split(",")]
-            dob = parts[0]
-            pob = parts[1] if len(parts) > 1 else None
-        if "Починал" in infobox or "Умрел" in infobox:
-            dod = infobox.get("Починал") or infobox.get("Умрел")
-        if "Пол" in infobox:
-            gender = infobox["Пол"]
-
-        if not (dob and pob and dod):
-            pattern_full = re.compile(
-                r"\(\s*(?P<pob>.+?)\s*,\s*(?P<dob>\d{1,2}\s+\w+\s+\d{4})\s*—\s*(?P<pod>.+?)\s*,\s*(?P<dod>\d{1,2}\s+\w+\s+\d{4})\s*\)"
-            )
-            m = pattern_full.search(first_para)
-            if m:
-                pob = pob or m.group("pob").strip()
-                dob = dob or m.group("dob").strip()
-                pod = m.group("pod").strip()
-                dod = dod or m.group("dod").strip()
-
-        if not (dob and pob):
-            pattern_birth_only = re.compile(
-                r"\(\s*(?P<pob>.+?)\s*,\s*(?P<dob>\d{1,2}\s+\w+\s+\d{4})\s*\)"
-            )
-            m2 = pattern_birth_only.search(first_para)
-            if m2:
-                pob = pob or m2.group("pob").strip()
-                dob = dob or m2.group("dob").strip()
-
-        if not (dob and pob):
-            male = re.search(
-                r"Роден е во\s+(?P<loc>[^,]+),\s*во\s*(?P<year>\d{4})\s*година",
-                full_text
-            )
-            female = re.search(
-                r"Родена е во\s+(?P<loc>[^,]+),\s*во\s*(?P<year>\d{4})\s*година",
-                full_text
-            )
-            if male:
-                pob = pob or male.group("loc").strip()
-                dob = dob or male.group("year").strip()
-            elif female:
-                pob = pob or female.group("loc").strip()
-                dob = dob or female.group("year").strip()
-
-        if not gender:
-            if re.search(r"\bРоден е\b", full_text):
-                gender = "Машко"
-            elif re.search(r"\bРодена е\b", full_text):
-                gender = "Женско"
-
         result = {
             "page_title": title,
             "full_text": full_text,
-            "date_of_birth": dob,
-            "place_of_birth": pob,
-            "date_of_death": dod,
-            "place_of_death": pod,
-            "gender": gender,
             "infobox": infobox,
             "link":url
         }
@@ -140,7 +82,6 @@ class WikipediaScraper:
                 print(f' Couldnt find author {author} on Wikipedia')
             else:
                 author_id=self.db.get_author_id(author)
-                self.db.update_author(author_id,result["gender"],result["place_of_birth"],result['date_of_birth'],result['date_of_death'],result['place_of_death'])
                 self.db.insert_biography(author_id,result["full_text"],result["link"])
                 print(f'Succesfully updated author {author} with id {author_id}')
                 print(f"Succesfuly inserted the biography")
