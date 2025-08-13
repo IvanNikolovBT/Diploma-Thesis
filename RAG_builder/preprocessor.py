@@ -19,7 +19,7 @@ import time
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-CHUNK_SIZE = 600
+CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 100
 OCR_DPI = 300
 logging.basicConfig(level=logging.INFO)  
@@ -152,11 +152,15 @@ class Preprocessor:
                         continue
 
 
-                    page_chunks = self.splitter.create_documents(
+                    """ page_chunks = self.splitter.create_documents(
                         texts=[text],
                         metadatas=[base_meta]
                     )
-                    docs.extend(self._add_chunk_sequence_meta(page_chunks))
+                    docs.extend(self._add_chunk_sequence_meta(page_chunks))"""
+                    docs.append(Document(
+                    page_content=text,
+                    metadata=base_meta
+                ))
 
         except Exception as e:
             print(f"PDF processing failed for {path}: {e}")
@@ -184,16 +188,9 @@ class Preprocessor:
         logger.info(f"Loaded {len(all_documents)} total chunks from {sum(1 for _ in directory.glob('*.pdf'))} PDFs")
         return all_documents
     def _get_pdf_metadata(self, path: Path) -> Dict:
-        """Extract PDF-specific metadata"""
         with pdfplumber.open(path) as pdf:
             return {
                 "pdf_title": pdf.metadata.get("Title", ""),
-                "pdf_author": pdf.metadata.get("Author", ""),
-                "pdf_creator": pdf.metadata.get("Creator", ""),
-                "pdf_producer": pdf.metadata.get("Producer", ""),
-                "pdf_creation_date": pdf.metadata.get("CreationDate", ""),
-                "pdf_mod_date": pdf.metadata.get("ModDate", ""),
-                "pdf_version": pdf.metadata.get("PDFVersion", ""),
                 "pdf_page_count": len(pdf.pages)
             }
     
@@ -226,5 +223,4 @@ print("\nAvailable metadata fields:")
 print(pdf_chunks[0].metadata.keys())
 
 print("\nPDF technical metadata:")
-print(f"Creator: {pdf_chunks[0].metadata['pdf_creator']}")
 print(f"Page size: {pdf_chunks[0].metadata['pdf_page_size']}")"""

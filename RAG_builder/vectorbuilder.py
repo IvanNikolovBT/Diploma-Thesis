@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class VectorDBBuilder:
-    def __init__(self, embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(self):
 
         try:
             
@@ -164,7 +164,36 @@ class VectorDBBuilder:
         except Exception as e:
             logger.error(f"Vector DB operation failed: {e}")
             return None
+    def query_database(
+        self,
+        query_text: str,
+        collection_name: str = "macedonian_poetry",
+        n_results: int = 5,
+        filters: Optional[Dict] = None
+    ) -> Dict:
+       
+        try:
+            collection = self.client.get_collection(collection_name)
+            
 
+            query_embedding = self.model.encode(query_text).tolist()
+            
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_results,
+                where=filters,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            return {
+                "documents": results["documents"][0],
+                "metadatas": results["metadatas"][0],
+                "distances": results["distances"][0]
+            }
+            
+        except Exception as e:
+            logger.error(f"Query failed: {e}")
+            return {}
 if __name__ == "__main__":
     try:
  
@@ -175,47 +204,57 @@ if __name__ == "__main__":
         processor = Preprocessor()
 
         logger.info("Loading text documents...")
-        txt_contents = {}
-        try:
-            txt_contents = processor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
-            if not txt_contents:
-                logger.error("No text documents loaded")
+        choice = int(input("Would you like to: \n"
+                            "1.Build?\n2.Query").strip())
+           
+        if choice==1:
+            txt_contents = {}
+            try:
+                txt_contents = processor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
+                if not txt_contents:
+                    logger.error("No text documents loaded")
+                else:
+                    sample_book_id = next(iter(txt_contents))
+                    sample_chunk = txt_contents[sample_book_id][0]
+                    logger.debug(f"Sample metadata for book {sample_book_id}:")
+                    logger.debug(sample_chunk.metadata)
+            except Exception as load_error:
+                logger.error(f"Document loading failed: {load_error}")
+
+            if txt_contents:
+                print("Creating vector database...")
+                start_time=time.time()
+                collection = builder.create_vector_db(txt_contents)
+                end_time=time.time()
+                if collection:
+                    logger.info(f'Created collection: took {end_time-start_time} duration')
+                    try:
+                        logger.info("Running test query...")
+                        results = collection.query(
+                            query_texts=["Петре м андреевски"],
+                            n_results=20,
+                            where={"author_full_name": {"$ne": ""}}  
+                        )
+                        
+                        if results and 'documents' in results:
+                            logger.info("\nQuery results:")
+                            for i, (text, meta) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
+                                logger.info(f"\nResult {i+1}:")
+                                logger.info(f"Author: {meta.get('author_full_name', 'Unknown')}")
+                                logger.info(f"Book: {meta.get('book_title', 'Unknown')}")
+                                logger.info(f"Text: {text}")
+                        else:
+                            logger.warning("No results returned from query")
+                    except Exception as query_error:
+                        logger.error(f"Query failed: {query_error}")
             else:
-                sample_book_id = next(iter(txt_contents))
-                sample_chunk = txt_contents[sample_book_id][0]
-                logger.debug(f"Sample metadata for book {sample_book_id}:")
-                logger.debug(sample_chunk.metadata)
-        except Exception as load_error:
-            logger.error(f"Document loading failed: {load_error}")
-
-        if txt_contents:
-            print("Creating vector database...")
-            start_time=time.time()
-            collection = builder.create_vector_db(txt_contents)
-            end_time=time.time()
-            if collection:
-                logger.info(f'Created collection: took {end_time-start_time} duration')
-                try:
-                    logger.info("Running test query...")
-                    results = collection.query(
-                        query_texts=["Петре м андреевски"],
-                        n_results=20,
-                        where={"author_full_name": {"$ne": ""}}  
-                    )
-                    
-                    if results and 'documents' in results:
-                        logger.info("\nQuery results:")
-                        for i, (text, meta) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
-                            logger.info(f"\nResult {i+1}:")
-                            logger.info(f"Author: {meta.get('author_full_name', 'Unknown')}")
-                            logger.info(f"Book: {meta.get('book_title', 'Unknown')}")
-                            logger.info(f"Text: {text}...")
-                    else:
-                        logger.warning("No results returned from query")
-                except Exception as query_error:
-                    logger.error(f"Query failed: {query_error}")
-        else:
-            logger.error("No documents available for vector DB creation")
-
+                logger.error("No documents available for vector DB creation")
+        elif choice==2:
+            results=builder.query_database('Петре М. Андреевски песни ')
+            for i  in range(len(results)):
+                print(results["documents"][i])
+                print(results["metadatas"][i])
+                print(results["distances"][i])
+                
     except Exception as main_error:
         logger.error(f"Main execution failed: {main_error}")
