@@ -9,10 +9,10 @@ from preprocessor import Preprocessor
 import logging
 import time 
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
-
+BM25_STORE = Path("vector_db/bm25_texts.json")
 class VectorDBBuilder:
     def __init__(self):
 
@@ -164,7 +164,7 @@ class VectorDBBuilder:
         except Exception as e:
             logger.error(f"Vector DB operation failed: {e}")
             return None
-    def query_database(
+    def query_database_semantic(
         self,
         query_text: str,
         collection_name: str = "macedonian_poetry",
@@ -172,6 +172,29 @@ class VectorDBBuilder:
         filters: Optional[Dict] = None
     ) -> Dict:
        
+        try:
+            collection = self.client.get_collection(collection_name)
+            
+
+            query_embedding = self.model.encode(query_text).tolist()
+            
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_results,
+                where=filters,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            return {
+                "documents": results["documents"][0],
+                "metadatas": results["metadatas"][0],
+                "distances": results["distances"][0]
+            }
+            
+        except Exception as e:
+            logger.error(f"Query failed: {e}")
+            return {}
+    def query_database_lexical(self,query_text:str,collection_name='lexical_poetry',n_results:int = 5,filters: Optional[Dict]=None):
         try:
             collection = self.client.get_collection(collection_name)
             
@@ -252,11 +275,15 @@ if __name__ == "__main__":
             else:
                 logger.error("No documents available for vector DB creation")
         elif choice==2:
-            results=builder.query_database('Петре М. Андреевски песни ')
+            results=builder.query_database_semantic('Петре М. Андреевски песни за љубов')
+            suma=0
             for i  in range(len(results)):
                 print(results["documents"][i])
                 print(results["metadatas"][i])
                 print(results["distances"][i])
+                suma+=float(results['distances'][i])
                 
+            suma=suma/(len(results))
+            print(f'average len is {suma}')
     except Exception as main_error:
         logger.error(f"Main execution failed: {main_error}")
