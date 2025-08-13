@@ -210,7 +210,9 @@ if __name__ == "__main__":
         if choice==1:
             txt_contents = {}
             try:
-                txt_contents = processor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
+                #txt_contents = processor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
+                txt_contents = processor.load_txt()
+                
                 if not txt_contents:
                     logger.error("No text documents loaded")
                 else:
