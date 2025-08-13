@@ -18,9 +18,10 @@ import time
 
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+from langchain.text_splitter import CharacterTextSplitter
 
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 1400
+CHUNK_OVERLAP = 200
 OCR_DPI = 300
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
@@ -29,11 +30,18 @@ class Preprocessor:
                  chunk_size: int = CHUNK_SIZE,
                  chunk_overlap: int = CHUNK_OVERLAP,
                  ocr_if_needed: bool = True):
-        self.splitter = RecursiveCharacterTextSplitter(
+        """self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             separators=["\n\n", "\n", " ", ""]  
-        )
+        )"""
+        self.splitter = CharacterTextSplitter(
+        chunk_size=chunk_size,       
+        chunk_overlap=chunk_overlap, 
+        separator="",                
+        length_function=len,         
+        is_separator_regex=False     
+    )
         self.ocr_if_needed = ocr_if_needed
         self.db = PoetryDB()
         
@@ -44,7 +52,7 @@ class Preprocessor:
             return "cpu"
         
         try:
-            # Test actual GPU functionality
+            
             torch.zeros(1).to("cuda")
             return "cuda"
         except RuntimeError as e:
@@ -105,14 +113,15 @@ class Preprocessor:
 
         print(f"Loaded {sum(len(v) for v in chunked_documents.values())} chunks from {len(chunked_documents)} books")
         return chunked_documents
-
     def load_pdf(self, path: Path) -> List[Document]:
         docs = []
         try:
             book_id = re.search(r'^(\d+)', path.stem).group(1)
             book_metadata = self.db.get_book_info_by_id_in_link(book_id)
-            
             pdf_metadata = self._get_pdf_metadata(path)
+            
+            full_text = ""
+            page_metadata_map = {} 
             
             with pdfplumber.open(path) as pdf:
                 print(f"\nPDF Metadata for {path.name}:")
@@ -130,13 +139,11 @@ class Preprocessor:
                         "source_path": str(path),
                         "page": i+1,
                         "pdf_page_size": f"{page.width}x{page.height}",
-                        "is_ocr": False 
+                        "is_ocr": False
                     }
-
 
                     text = page.extract_text() or ""
                     
-
                     if not text.strip() and self.ocr_if_needed:
                         images = convert_from_path(
                             str(path),
@@ -145,27 +152,48 @@ class Preprocessor:
                             last_page=i+1
                         )
                         if images:
-                            text = pytesseract.image_to_string(images[0], lang="mkd+eng") 
+                            text = pytesseract.image_to_string(images[0], lang="mkd+eng")
                             base_meta["is_ocr"] = True
                     
-                    if not text.strip():
-                        continue
+                    if text.strip():
+                        
+                        page_separator = f"\n\n[PDF_PAGE:{i+1}]\n\n"
+                        full_text += page_separator + text
+                        page_metadata_map[i+1] = base_meta
 
-
-                    """ page_chunks = self.splitter.create_documents(
-                        texts=[text],
-                        metadatas=[base_meta]
-                    )
-                    docs.extend(self._add_chunk_sequence_meta(page_chunks))"""
-                    docs.append(Document(
-                    page_content=text,
-                    metadata=base_meta
+            if not full_text.strip():
+                return []
+            
+            chunks = self.splitter.split_text(full_text)
+            
+        
+            for chunk in chunks:
+                included_pages = set()
+                for page_num in page_metadata_map.keys():
+                    if f"[PDF_PAGE:{page_num}]" in chunk:
+                        included_pages.add(page_num)
+                
+                if not included_pages:
+                    continue
+                    
+                merged_meta = {
+                    "included_pages": ",".join(map(str, sorted(included_pages))),  # Fixed
+                    "first_page": min(included_pages),
+                    "last_page": max(included_pages),
+                    **page_metadata_map[next(iter(included_pages))]
+                }
+                
+                clean_text = re.sub(r'\n?\[PDF_PAGE:\d+\]\n?', '', chunk)
+                docs.append(Document(
+                    page_content=clean_text,
+                    metadata=merged_meta
                 ))
-
+                
         except Exception as e:
             print(f"PDF processing failed for {path}: {e}")
         
         return docs
+
     def load_all_pdfs(self, directory_path: str = "pdfovi/MIladinovci") -> List[Document]:
         all_documents = []
         directory = Path(directory_path)
@@ -195,8 +223,8 @@ class Preprocessor:
             }
     
 
-processor = Preprocessor()
-"""
+"""processor = Preprocessor()
+
 start=time.time()
 contents = processor.load_txt()
 print(f'Duration {time.time()-start} seconds for all semantic')
