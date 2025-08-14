@@ -16,12 +16,10 @@ import torch
 import logging
 import time
 
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 from langchain.text_splitter import CharacterTextSplitter
 
-CHUNK_SIZE = 1400
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 100
 OCR_DPI = 300
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
@@ -30,11 +28,6 @@ class Preprocessor:
                  chunk_size: int = CHUNK_SIZE,
                  chunk_overlap: int = CHUNK_OVERLAP,
                  ocr_if_needed: bool = True):
-        """self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            separators=["\n\n", "\n", " ", ""]  
-        )"""
         self.splitter = CharacterTextSplitter(
         chunk_size=chunk_size,       
         chunk_overlap=chunk_overlap, 
@@ -72,14 +65,13 @@ class Preprocessor:
             })
         return chunks
 
-    def load_txt(self, directory_path: str = "extracted_books_from_images") -> Dict[str, List[Document]]:
-        chunked_documents = {}
+    def load_txt(self, directory_path: str = "extracted_books_from_images") -> List[Document]:
+        all_chunks = []
         directory = Path(directory_path)
         pattern = re.compile(r'^(\d+)\.txt$')
 
         for file_path in directory.glob('*.txt'):
             try:
-                
                 text = file_path.read_text(encoding='utf-8')
                 m = pattern.match(file_path.name)
                 if not m:
@@ -100,19 +92,21 @@ class Preprocessor:
                     "source_type": "text"
                 }
 
+    
                 chunks = self.splitter.create_documents(
                     texts=[text],
                     metadatas=[base_metadata]
                 )
 
                 chunks = self._add_chunk_sequence_meta(chunks)
-                chunked_documents[book_id] = chunks
+
+                all_chunks.extend(chunks)
 
             except Exception as e:
                 print(f"Error processing {file_path.name}: {e}")
 
-        print(f"Loaded {sum(len(v) for v in chunked_documents.values())} chunks from {len(chunked_documents)} books")
-        return chunked_documents
+        print(f"Loaded {len(all_chunks)} chunks from {len(set(doc.metadata['book_id'] for doc in all_chunks))} books")
+        return all_chunks
     def load_pdf(self, path: Path) -> List[Document]:
         docs = []
         try:
@@ -124,11 +118,11 @@ class Preprocessor:
             page_metadata_map = {} 
             
             with pdfplumber.open(path) as pdf:
-                print(f"\nPDF Metadata for {path.name}:")
-                print("="*50)
-                print(f"PDF Info: {pdf.metadata}")
-                print(f"Number of pages: {len(pdf.pages)}")
-                print("="*50)
+                #print(f"\nPDF Metadata for {path.name}:")
+                #print("="*50)
+                #print(f"PDF Info: {pdf.metadata}")
+                #print(f"Number of pages: {len(pdf.pages)}")
+                #print("="*50)
                 
                 for i, page in enumerate(pdf.pages):
                     base_meta = {

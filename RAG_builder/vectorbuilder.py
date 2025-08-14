@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 BM25_STORE = Path("vector_db/bm25_texts.json")
 class VectorDBBuilder:
-    def __init__(self):
+    def __init__(self,CHUNK_SIZE = 1000,CHUNK_OVERLAP = 100,model_name='sentence-transformers/all-MiniLM-L6-v2'):
 
         try:
             
@@ -22,7 +22,7 @@ class VectorDBBuilder:
             logger.info(f"Using device: {self.device.upper()}")
             
             self.model = SentenceTransformer(
-            'sentence-transformers/all-MiniLM-L6-v2',
+            model_name,
             device='cpu'
         )
             
@@ -34,7 +34,7 @@ class VectorDBBuilder:
                     is_persistent=True
                 )
             )
-            self.preprocessor=Preprocessor()
+            self.preprocessor=Preprocessor(chunk_size=CHUNK_SIZE,chunk_overlap=CHUNK_OVERLAP)
             
         except Exception as e:
             logger.error(f"Initialization failed: {e}")
@@ -45,7 +45,7 @@ class VectorDBBuilder:
         for key, value in metadata.items():
             if value is None:
     
-                logger.warning(f"Found None value in metadata field: {key} for book with book id {metadata['book_id']} and file name {metadata['file_name']}")
+                #logger.warning(f"Found None value in metadata field: {key} for book with book id {metadata['book_id']} and file name {metadata['file_name']}")
                 if key.endswith("_id") or key in ["page", "chunk_seq"]:
                     cleaned[key] = 0
                 elif key in ["is_ocr", "is_processed"]:
@@ -56,7 +56,7 @@ class VectorDBBuilder:
                 cleaned[key] = value
         return cleaned
 
-    def create_vector_db(self, 
+    def create_vector_db(self,choice, 
                     documents: Union[Dict[str, List[Document]], List[Document]], 
                     collection_name: str = "macedonian_poetry") -> Optional[chromadb.Collection]:
         """Create or update vector database with interactive options"""
@@ -66,12 +66,7 @@ class VectorDBBuilder:
             collection_exists = collection_name in existing_collections
             
             if collection_exists:
-                print(f"\nVector database '{collection_name}' already exists.")
-                choice = input("Would you like to: \n"
-                            "1. Add these documents to existing collection\n"
-                            "2. Recreate the collection from scratch\n"
-                            "3. Cancel operation\n"
-                            "Enter choice (1-3): ").strip()
+                
                 
                 if choice == "3":
                     print("Operation cancelled.")
@@ -217,63 +212,56 @@ class VectorDBBuilder:
         except Exception as e:
             logger.error(f"Query failed: {e}")
             return {}
-if __name__ == "__main__":
+        
+    def build_database_fully(self):
+        """choice = input("Would you like to: \n"
+                            "1. Add these documents to existing collection\n"
+                            "2. Recreate the collection from scratch\n"
+                            "3. Cancel operation\n"
+                            "Enter choice (1-3): ").strip()"""
+        choice=2
+        text_docs=self.preprocessor.load_txt()
+        pdf_docs=self.preprocessor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
+        self.create_vector_db(choice,text_docs+pdf_docs)
+"""if __name__ == "__main__":
     try:
  
         logger.info("Initializing vector database builder...")
         builder = VectorDBBuilder()
-        
+        builder.build_database_fully()
+        choice=2
         logger.info("Initializing document preprocessor...")
         processor = Preprocessor()
 
         logger.info("Loading text documents...")
         choice = int(input("Would you like to: \n"
                             "1.Build?\n2.Query").strip())
-           
         if choice==1:
-            txt_contents = {}
-            try:
-                #txt_contents = processor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
-                txt_contents = processor.load_txt()
-                
-                if not txt_contents:
-                    logger.error("No text documents loaded")
-                else:
-                    sample_book_id = next(iter(txt_contents))
-                    sample_chunk = txt_contents[sample_book_id][0]
-                    logger.debug(f"Sample metadata for book {sample_book_id}:")
-                    logger.debug(sample_chunk.metadata)
-            except Exception as load_error:
-                logger.error(f"Document loading failed: {load_error}")
-
-            if txt_contents:
-                print("Creating vector database...")
-                start_time=time.time()
-                collection = builder.create_vector_db(txt_contents)
-                end_time=time.time()
-                if collection:
-                    logger.info(f'Created collection: took {end_time-start_time} duration')
-                    try:
-                        logger.info("Running test query...")
-                        results = collection.query(
-                            query_texts=["Петре м андреевски"],
-                            n_results=20,
+            start_time=time.time()
+            collection=builder.build_database_fully()
+            end_time=time.time()
+            if collection:
+                logger.info(f'Created collection: took {end_time-start_time} duration')
+                try:
+                    logger.info("Running test query...")
+                    results = collection.query(
+                    query_texts=["Петре м андреевски"],
+                        n_results=20,
                             where={"author_full_name": {"$ne": ""}}  
-                        )
+                    )
                         
-                        if results and 'documents' in results:
-                            logger.info("\nQuery results:")
-                            for i, (text, meta) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
+                    if results and 'documents' in results:
+                        logger.info("\nQuery results:")
+                        for i, (text, meta) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
                                 logger.info(f"\nResult {i+1}:")
                                 logger.info(f"Author: {meta.get('author_full_name', 'Unknown')}")
                                 logger.info(f"Book: {meta.get('book_title', 'Unknown')}")
                                 logger.info(f"Text: {text}")
-                        else:
-                            logger.warning("No results returned from query")
-                    except Exception as query_error:
+                    else:
+                        logger.warning("No results returned from query")
+                except Exception as query_error:
                         logger.error(f"Query failed: {query_error}")
-            else:
-                logger.error("No documents available for vector DB creation")
+                
         elif choice==2:
             results=builder.query_database_semantic('Петре М. Андреевски песни за љубов')
             suma=0
@@ -286,4 +274,11 @@ if __name__ == "__main__":
             suma=suma/(len(results))
             print(f'average len is {suma}')
     except Exception as main_error:
-        logger.error(f"Main execution failed: {main_error}")
+        logger.error(f"Main execution failed: {main_error}")"""
+        
+#'sentence-transformers/all-MiniLM-L6-v2'
+  #0.4695906440416972  CHUNK_SIZE = 1400 CHUNK_OVERLAP = 300     '
+  #0.45668325821558636 CHUNK_SIZE = 1500 CHUNK_OVERLAP = 200 
+  #0.45740966002146405 CHUNK_SIZE = 900 CHUNK_OVERLAP = 200
+  #0.4370685617129008 CHUNK_SIZE = 1200CHUNK_OVERLAP = 200
+  # 0.4704437851905823 CHUNK_SIZE = 1000 CHUNK_OVERLAP = 100
