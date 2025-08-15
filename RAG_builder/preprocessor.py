@@ -7,8 +7,6 @@ from pdf2image import convert_from_path
 import pytesseract
 from typing import Dict, List
 from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_experimental.text_splitter import SemanticChunker
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from poetry_DB import PoetryDB
 from langchain_community.embeddings import HuggingFaceEmbeddings

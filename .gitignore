@@ -59,3 +59,4 @@ vector_db
 
 all-MiniLM-L6-v2.F16.gguf
 optuna_studies.db
+RAG_builder/mk_core_news_sm-3.8.0-py3-none-any

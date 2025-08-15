@@ -326,3 +326,6 @@ class PoetryDB:
         except Exception as e:
             print("Database error:", e)
             raise               
+        
+    def get_word_from_dictionary():
+            pass
