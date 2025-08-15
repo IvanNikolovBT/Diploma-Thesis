@@ -95,7 +95,7 @@ print(f"Final CPU Temp: {final_cpu_temp}°C")
 print(f"Initial GPU Temp: {initial_gpu_temp}°C")
 print(f"Final GPU Temp: {final_gpu_temp}°C")
 
-# Log response for debugging
+
 with open("response_log.txt", "a") as log_file:
     log_entry = {
         "question": "Што е Битола?",
