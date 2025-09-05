@@ -27,7 +27,7 @@ def bm25_on_lemmas(lemma_docs):
     target_doc = lemma_docs[0]
     scores = bm25.get_scores(target_doc)
     
-    # REVERTED: Original approach of assigning same score to all tokens
+
     lemma_scores = dict(zip(target_doc, [scores[0]] * len(target_doc)))
     return lemma_scores
 

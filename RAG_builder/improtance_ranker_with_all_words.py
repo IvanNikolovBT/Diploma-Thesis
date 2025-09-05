@@ -1,19 +1,18 @@
 import math
 from collections import Counter, defaultdict
 from pprint import pprint
-from preprocessor import Preprocessor  # Make sure this module is available
+from preprocessor import Preprocessor  
 import spacy
 from rank_bm25 import BM25Okapi
 
 nlp = spacy.load("mk_core_news_lg")
 
-# Load all documents for BM25 training
+
 pre=Preprocessor()
 all_docs = pre.load_all_pdfs() + pre.load_txt()
-extra_texts = [doc.page_content for doc in all_docs]  # Extract text from Langchain Documents
+extra_texts = [doc.page_content for doc in all_docs]  
 
 def build_lemma_corpus(text, extra_texts):
-    """Build lemma corpus with external documents for meaningful IDF"""
     docs = [text] + extra_texts
     lemma_docs = []
     for d in docs:
@@ -66,7 +65,7 @@ def representative_stats_for_lemma(tokens):
     dep_counts = Counter([t.dep_ for t in tokens])
     rep_pos = pos_counts.most_common(1)[0][0] if pos_counts else "UNK"
     
-    # Handle imperative verbs specifically
+
     if rep_pos == "UNK":
         if any(t.text.lower() in {"скокни", "стој", "бегај"} for t in tokens):
             rep_pos = "VERB"
@@ -100,7 +99,7 @@ def normalize_dict(d):
 def score_lemmas(text, extra_texts, top_n=30):
     """Enhanced scoring with external corpus and verb prioritization"""
     lemma_docs = build_lemma_corpus(text, extra_texts)
-    bm25_scores = compute_term_scores(lemma_docs)  # Use proper term scoring
+    bm25_scores = compute_term_scores(lemma_docs)  
 
     target_doc = nlp(text)
     lemma_tokens = extract_candidates(target_doc)
@@ -112,7 +111,7 @@ def score_lemmas(text, extra_texts, top_n=30):
 
     bm25_norm = normalize_dict({k: v for k, v in bm25_scores.items() if k in lemma_info})
 
-    # Enhanced weights with verb priority
+
     pos_weight = {"PROPN": 2.0, "NOUN": 1.6, "VERB": 1.8, "ADJ": 1.3, "ADV": 0.9, "UNK": 0.5}
     dep_weight = {"ROOT": 2.0, "nsubj": 1.6, "obj": 1.4, "obl": 1.2, "amod": 1.1}
 
@@ -146,14 +145,13 @@ def score_lemmas(text, extra_texts, top_n=30):
     child_norm = normalize_dict(child_counts_raw)
     sim_norm = normalize_dict(sim_raw)
 
-    # Rebalanced weights (verbs get higher priority)
     weights = {
         "tfidf": 0.35,  
-        "pos": 0.25,    # Increased importance
+        "pos": 0.25,    
         "dep": 0.15,
-        "entity": 0.05, # Reduced entity weight
+        "entity": 0.05, 
         "children": 0.05,
-        "sim": 0.15,    # Increased similarity weight
+        "sim": 0.15,    
     }
 
     results = []
@@ -203,7 +201,7 @@ if __name__ == "__main__":
 скокни, не е толку голема
 висината
 """
-    ranked = score_lemmas(sample_text, extra_texts=extra_texts, top_n=40)
+    ranked = score_lemmas(sample_text,top_n=40)
 
     print(f"{'Lemma':<20} {'Score':<7} {'TFIDF':<6} {'POS':<7} {'DEP':<8} {'Freq':<4} {'Ent':<5} {'Ch':<3}")
     print("-" * 70)
