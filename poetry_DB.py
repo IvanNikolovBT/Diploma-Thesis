@@ -236,13 +236,17 @@ class PoetryDB:
                 
         
     def get_kik_song_id(self,song_name:str):
-        "Returns the kik song"
         with self.conn.cursor() as cur:
             cur.execute("SELECT id FROM song_kafe_kniga WHERE song_title = %s", (song_name,))
             result = cur.fetchone()
         return result[0] if result else None  
 
-            
+    def get_all_kik_song(self):
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT * FROM song_kafe_kniga")
+            rows = cur.fetchall()        # <-- fetch all rows
+        return rows 
+             
     def insert_word_information_o_tolkoven(self, title: str, pos_tags: str, text: str):
         try:
             with self.conn.cursor() as cur:
