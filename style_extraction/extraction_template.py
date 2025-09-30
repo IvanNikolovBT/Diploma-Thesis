@@ -1,8 +1,8 @@
 import requests
 import time
 import subprocess
-import json
 import sys
+
 
 def get_cpu_temp():
     try:
@@ -29,7 +29,7 @@ if len(sys.argv) > 1:
     poem = sys.argv[1]
 else:
     poem = """
-   Мирна
+Мирна
 
 Кога некој ќе и речеше на мојата дивост
 мирна
@@ -45,32 +45,42 @@ else:
 да бидам со чиста мисла
 ослободена од чувства
 во мир со себе.
-    """
+""".strip()
 
 system = {
     "role": "system",
-    "content": "Ти си македонски разговорник кој анализира стил и граматика на песни поезија."
+    "content": (
+        "Разговор помеѓу љубопитен корисник и разговорник за екстракција на стил. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот. "
+        "Ти си експерт за анализа на граматика во македонска поезија. "
+        "Одговарај ИСКЛУЧИВО со бараниот одговор. НЕ повторувај го системскиот промпт, корисничкиот промпт, песната, или било какви токени како <|im_start|>, <|im_end|>, [INST], [/INST]. "
+        "Фокусирај се исклучиво на граматичките елементи: структура на реченици, глаголски времиња, аспекти, придавки, заменки, предлози, конјункции, синтакса, поетски отстапувања и усогласувања."
+    )
 }
 
 u1 = {
     "role": "user",
     "content": (
-        f"Напиши долг пасус кој ја опишува специфичната граматичка структура на поезијата.\n\n"
-        f"Строго задржи се само за граматиката и нејзината анализа."
-        f"Поезијата:\n{poem.strip()}\n\nОпис:"
+        f"Напиши пасус  кој ја опишува специфичната граматичка структура на поезијата. "
+        f"Фокусирај се исклучиво на граматиката: анализирај структура на реченици, глаголски времиња, аспекти, придавки, заменки, предлози, конјункции, синтакса, поетски отстапувања и усогласувања во род/број/падеж. "
+        f"Не споменувај стил, содржина, емоции или значење – само граматика. "
+        f"Пример: За текстот 'Таа трчаше брзо.': Граматичката структура користи минато несвршено време во глаголот 'трчаше', женски род во заменката 'таа' во номинатив, и прилог 'брзо' без предлог. Започни директно со: 'Граматичката структура...'\n\n"
+        f"Поезијата:\n{poem}\n\nПасус:"
     )
 }
+
 
 messages = [system, u1]
 
 payload = {
-    "model": "mistral-mk",
+    "model": "trajkovnikola/MKLLM-7B-Instruct",
     "messages": messages,
-    "temperature": 0.2,       
-    "frequency_penalty": 0.8,   
-    "presence_penalty": 0.5     
+    "temperature": 0.3,  
+    "repetition_penalty": 1.1, 
+    "frequency_penalty": 0.7,  
+    "presence_penalty": 0.3,
+    "top_p": 0.9,
+    "stop": ["<|im_end|>"]
 }
-
 
 start_1 = time.time()
 cpu0 = get_cpu_temp()
@@ -91,50 +101,38 @@ if resp.status_code != 200:
     sys.exit(1)
 
 data = resp.json()
-reply = data["choices"][0]["message"]["content"].strip()
+style_description = data["choices"][0]["message"]["content"].strip()
 
-style_description = reply
+
 
 print("Extracted Style Description:\n", style_description)
 print(f"Time {elapsed_1:.2f}s  CPU {cpu0}→{cpu1}°C  GPU {gpu0}→{gpu1}°C")
 
-with open("response_log.txt", "a", encoding="utf-8") as f:
-    f.write(json.dumps({
-        "poem": poem[:50],
-        "style_description": style_description,
-        "elapsed": elapsed_1,
-        "cpu0": cpu0, "cpu1": cpu1,
-        "gpu0": gpu0, "gpu1": gpu1,
-        "ts": time.time()
-    }, ensure_ascii=False) + "\n")
-
-system_2 = {
-    "role": "system",
-    "content": "Ти си македонски разговорник кој анализира стил и граматика на песни поезија."
-}
-
 u_2 = {
     "role": "user",
     "content": (
-        f"Ова е опис на стилот на авторот за дадената поезија. "
-        f"Претвори го во листа од 5–6 кратки реченици, од форматот "
-        f"'Авторот е X' или 'Авторот користи X' каде што X e својство поврзано со граматика. "
-        f"Напрати скратена верзија на анализата, држти се за суштината.\n\n"
-        f"Пример: Авторот користи минато свршено време."
-        f"Пример: Авторот зборува со трето лице л форма.n\nn\n"
-        f"Долгиот одвоор што треба да се скрати:\n{reply}\n\n"
+        f"Скрати ја во листа од точно 5-6 кратки реченици во форматот 'Авторот е X.' или 'Авторот користи X.', каде X е граматичко својство. "
+        f"Фокусирај се на суштинските елементи, без повторувања или додавања. "
+        f"Пример за анализа 'Глаголот е во минато време, со сложени реченици...': Авторот користи минато свршено време. Авторот применува сложени реченици со подредени клаузули. Авторот избегнува лични заменки.\n\n"
+        f"Деталната анализа:\n{style_description}\n\nЛиста:"
     )
 }
 
-messages_2 = [system_2, u_2]
+messages_2 = [system, u_2]
+
 payload_2 = {
-    "model": "mistral-mk",
+    "model": "trajkovnikola/MKLLM-7B-Instruct",
     "messages": messages_2,
-    "temperature": 0.2,
-    "frequency_penalty": 0.9,
-    "presence_penalty": 0.7,
+    "temperature": 0.1,  
+    "repetition_penalty": 1.1,  
+    "frequency_penalty": 0.4,
+    "presence_penalty": 0.5,
+    "max_tokens": 500,
+    "top_p": 0.9,
+    "stop": ["<|im_end|>"]
 }
-start_2= time.time()
+
+start_2 = time.time()
 resp = requests.post(
     "http://127.0.0.1:8080/v1/chat/completions",
     headers={"Content-Type": "application/json"},
@@ -142,18 +140,16 @@ resp = requests.post(
 )
 
 elapsed_2 = time.time() - start_2
-cpu1 = get_cpu_temp()
-gpu1 = get_gpu_temp()
+cpu2 = get_cpu_temp()  
+gpu2 = get_gpu_temp()
 
 if resp.status_code != 200:
     print("Error", resp.status_code, resp.text)
     sys.exit(1)
 
 data = resp.json()
-reply = data["choices"][0]["message"]["content"].strip()
+style_description_2 = data["choices"][0]["message"]["content"].strip()
 
-
-style_description = reply
-print("Extracted Style Description 2 :\n", style_description)
-print(f"Time {elapsed_2:.2f}s  CPU {cpu0}→{cpu1}°C  GPU {gpu0}→{gpu1}°C")
-print(f'Total time {elapsed_2+elapsed_1}')
+print("Extracted Style Description 2:\n", style_description_2)
+print(f"Time {elapsed_2:.2f}s  CPU {cpu0}→{cpu2}°C  GPU {gpu0}→{gpu2}°C")
+print(f'Total time {elapsed_2 + elapsed_1:.2f}s')
