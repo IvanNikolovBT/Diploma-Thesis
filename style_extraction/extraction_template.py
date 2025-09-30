@@ -62,7 +62,6 @@ u1 = {
         f"[INST]Напиши пасус  кој ја опишува специфичната граматичка структура на поезијата која што е подолу во текстот "
         f"Фокусирај се исклучиво на граматиката: анализирај структура на реченици, глаголски времиња, аспекти, придавки, заменки, предлози, конјункции, синтакса, поетски отстапувања и усогласувања во род/број/падеж. "
         f"Не споменувај стил, содржина, емоции или значење – само граматика.[/INST] "
-        f"Пример: За текстот 'Таа трчаше брзо.': [INST]Граматичката структура користи минато несвршено време во глаголот 'трчаше', женски род во заменката 'таа' во номинатив, и прилог 'брзо' без предлог. Започни директно со: 'Граматичката структура...'[/INST]\n\n"
         f"Поезијата:\n{poem}\n\nПасус:"
     )
 }
@@ -73,9 +72,9 @@ messages = [system, u1]
 payload = {
     "model": "trajkovnikola/MKLLM-7B-Instruct",
     "messages": messages,
-    "temperature": 0.3,  
-    "repetition_penalty": 1.1, 
-    "frequency_penalty": 0.7,  
+    "temperature": 0.0,  
+    "repetition_penalty": 0.6, 
+    "frequency_penalty": 0.4,  
     "presence_penalty": 0.3,
     "top_p": 0.9,
     "stop": ["<|im_end|>"]
@@ -121,12 +120,11 @@ messages_2 = [system, u_2]
 
 payload_2 = {
     "model": "trajkovnikola/MKLLM-7B-Instruct",
-    "messages": messages_2,
-    "temperature": 0.1,  
-    "repetition_penalty": 1.1,  
-    "frequency_penalty": 0.4,
-    "presence_penalty": 0.5,
-    "max_tokens": 500,
+    "messages": messages,
+    "temperature": 0.0,  
+    "repetition_penalty": 0.6, 
+    "frequency_penalty": 0.4,  
+    "presence_penalty": 0.3,
     "top_p": 0.9,
     "stop": ["<|im_end|>"]
 }
