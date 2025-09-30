@@ -2,8 +2,18 @@ import requests
 import time
 import subprocess
 import sys
+import threading
 
+elapsed = 0
+stop_timer = False
 
+def show_timer():
+    global elapsed, stop_timer
+    while not stop_timer:
+        print(f"\rWaiting: {elapsed:.1f}s", end="", flush=True)
+        time.sleep(0.1)
+        elapsed += 0.1
+    print()
 def get_cpu_temp():
     try:
         out = subprocess.run(["sensors"], capture_output=True, text=True).stdout
@@ -161,40 +171,45 @@ categories = [
     "Зборови кои означуваат богатство", "Интерпункциски симболи","Составени зборови со цртичка","Оксфордска запирка","Зборови во загради ","Броеви","Издолжени зборови"
 ]
 
-target_feature=categories[0]
-target_feature_definition=feature_definitions[0]
-prompt_template = (
-    f"[INST] {target_feature_definition}\n\n"
-    f"Напиши опис дали авторот на следниот пасус ја содржи оваа особина: {target_feature}. [/INST]\n"
+target_feature = categories[0]
+target_feature_definition = feature_definitions[0]
+
+user_message = (
+    f"{target_feature_definition}\n\n"
+    f"Напиши краток опис дали авторот на следниот пасус ја содржи оваа особина: {target_feature}. "
+    "Заврши по една реченица/параграф и не продолжувај понатаму.\n\n"
     f"Пасус:\n{poem}\n\nОпис:"
 )
 
-messages = [system, {
-        "role": "user",
-        "content": prompt_template
-    }]
+messages = [
+    system,
+    {"role": "user", "content": user_message}
+]
+
 payload = {
     "model": "trajkovnikola/MKLLM-7B-Instruct",
     "messages": messages,
-    "temperature": 0.3,  
-    "repetition_penalty": 0.6, 
-    "frequency_penalty": 0.4,  
+    "temperature": 0.3,
+    "repetition_penalty": 0.6,
+    "frequency_penalty": 0.4,
     "presence_penalty": 0.3,
     "top_p": 0.9,
-    "stop": ["<|im_end|>"]
+    "max_tokens":300,
+    #"stop": ["\n\n", "<|im_end|>"] 
+    "stop": ["\n\n", "<|im_end|>"] 
 }
 
-start_1 = time.time()
+timer_thread = threading.Thread(target=show_timer)
+timer_thread.start()
 cpu0 = get_cpu_temp()
 gpu0 = get_gpu_temp()
-
+start_time = time.time()
 resp = requests.post(
     "http://127.0.0.1:8080/v1/chat/completions",
     headers={"Content-Type": "application/json"},
     json=payload
 )
 
-elapsed_1 = time.time() - start_1
 cpu1 = get_cpu_temp()
 gpu1 = get_gpu_temp()
 
@@ -202,56 +217,13 @@ if resp.status_code != 200:
     print("Error", resp.status_code, resp.text)
     sys.exit(1)
 
+total_time = time.time() - start_time
+stop_timer = True  # Stop the timer
+timer_thread.join()
 data = resp.json()
 style_description = data["choices"][0]["message"]["content"].strip()
 
-print(data)
 
 
 print("Extracted Style Description:\n", style_description)
-print(f"Time {elapsed_1:.2f}s  CPU {cpu0}→{cpu1}°C  GPU {gpu0}→{gpu1}°C")
-"""
-u_2 = {
-    "role": "user",
-    "content": (
-        f"[INST]Скрати ја во листа од точно 5-6 кратки реченици во форматот 'Авторот е X.' или 'Авторот користи X.', каде X е граматичко својство. "
-        f"Фокусирај се на суштинските елементи, без повторувања или додавања.[/INST] "
-        f"Пример за анализа 'Глаголот е во минато време, со сложени реченици...': [INST]Авторот користи минато свршено време. Авторот применува сложени реченици со подредени клаузули. Авторот избегнува лични заменки.[/INST]\n\n"
-        f"Деталната анализа:\n{style_description}\n\nЛиста:"
-    )
-}
-
-messages_2 = [system, u_2]
-
-payload_2 = {
-    "model": "trajkovnikola/MKLLM-7B-Instruct",
-    "messages": messages,
-    "temperature": 0.0,  
-    "repetition_penalty": 0.6, 
-    "frequency_penalty": 0.4,  
-    "presence_penalty": 0.3,
-    "top_p": 0.9,
-    "stop": ["<|im_end|>"]
-}
-
-start_2 = time.time()
-resp = requests.post(
-    "http://127.0.0.1:8080/v1/chat/completions",
-    headers={"Content-Type": "application/json"},
-    json=payload_2
-)
-
-elapsed_2 = time.time() - start_2
-cpu2 = get_cpu_temp()  
-gpu2 = get_gpu_temp()
-
-if resp.status_code != 200:
-    print("Error", resp.status_code, resp.text)
-    sys.exit(1)
-
-data = resp.json()
-style_description_2 = data["choices"][0]["message"]["content"].strip()
-
-print("Extracted Style Description 2:\n", style_description_2)
-print(f"Time {elapsed_2:.2f}s  CPU {cpu0}→{cpu2}°C  GPU {gpu0}→{gpu2}°C")
-print(f'Total time {elapsed_2 + elapsed_1:.2f}s')"""
+print(f"Time {total_time:.2f}s  CPU {cpu0}→{cpu1}°C  GPU {gpu0}→{gpu1}°C")
