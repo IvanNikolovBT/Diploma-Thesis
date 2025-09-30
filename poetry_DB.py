@@ -331,5 +331,9 @@ class PoetryDB:
             print("Database error:", e)
             raise               
         
-    def get_word_from_dictionary():
-            pass
+    def get_words_from_dictionary(self) -> Optional[list[dict]]:
+        """Returns all entries from the dictionary as a list of dictionaries."""
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM o_tolkoven;")
+            result = cur.fetchall()
+        return result if result else None

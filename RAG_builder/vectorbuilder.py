@@ -8,16 +8,17 @@ import chromadb
 from preprocessor import Preprocessor
 import logging
 import time 
+from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
-
+from chromadb.utils import embedding_functions
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
 BM25_STORE = Path("vector_db/bm25_texts.json")
 class VectorDBBuilder:
-    def __init__(self,CHUNK_SIZE = 1000,CHUNK_OVERLAP = 100,model_name='sentence-transformers/all-MiniLM-L6-v2'):
+    def __init__(self,CHUNK_SIZE = 1000,CHUNK_OVERLAP = 100,model_name='sentence-transformers/all-MiniLM-L6-v2',BATCH_SIZE=3000):
 
         try:
-            
+            self.BATCH_SIZE=BATCH_SIZE
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Using device: {self.device.upper()}")
             
@@ -223,6 +224,36 @@ class VectorDBBuilder:
         text_docs=self.preprocessor.load_txt()
         pdf_docs=self.preprocessor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
         self.create_vector_db(choice,text_docs+pdf_docs)
+        
+    def build_dictionary_vdb(self):
+        """Build the vector database in batches."""
+        all_entries = self.preprocessor._get_all_from_o_tolkoven()  # full entries with all columns
+
+        
+        collection = self.client.get_or_create_collection(
+            name="macedonian_dictionary_v2",  # different name
+            embedding_function=embedding_functions.SentenceTransformerEmbeddingFunction(model_name='sentence-transformers/all-MiniLM-L6-v2')
+        )
+        
+        for i in tqdm(range(0, len(all_entries), self.BATCH_SIZE)):
+            batch_entries = all_entries[i:i + self.BATCH_SIZE]
+
+            
+            ids = [str(e['id']) for e in batch_entries]
+            metadatas = [{"title": e['title'], "pos_tags": e['pos_tags'], "full_text": e['full_text']} for e in batch_entries]
+            documents = [e['full_text'] for e in batch_entries]
+
+            collection.add(
+                ids=ids,
+                metadatas=metadatas,
+                documents=documents
+            )
+
+        logger.info(f"Finished adding {len(all_entries)} entries to the vector DB.")
+
+        
+test=VectorDBBuilder()
+test.build_dictionary_vdb() 
 """if __name__ == "__main__":
     try:
  

@@ -6,3 +6,9 @@ from poetry_DB import PoetryDB
 class DictionaryRetrieval:
     def __init__(self):
         self.db=PoetryDB()
+        
+        
+    def create_dictioanry_vector_db(self):
+        pass
+        
+    

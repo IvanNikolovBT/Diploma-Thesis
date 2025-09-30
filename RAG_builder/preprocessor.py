@@ -213,6 +213,8 @@ class Preprocessor:
                 "pdf_title": pdf.metadata.get("Title", ""),
                 "pdf_page_count": len(pdf.pages)
             }
+    def _get_all_from_o_tolkoven(self):
+        return self.db.get_words_from_dictionary()
     
 
 """processor = Preprocessor()

@@ -171,8 +171,9 @@ categories = [
     "Зборови кои означуваат богатство", "Интерпункциски симболи","Составени зборови со цртичка","Оксфордска запирка","Зборови во загради ","Броеви","Издолжени зборови"
 ]
 
-target_feature = categories[0]
-target_feature_definition = feature_definitions[0]
+category=2
+target_feature = categories[category]
+target_feature_definition = feature_definitions[category]
 
 user_message = (
     f"{target_feature_definition}\n\n"
@@ -194,8 +195,7 @@ payload = {
     "frequency_penalty": 0.4,
     "presence_penalty": 0.3,
     "top_p": 0.9,
-    "max_tokens":300,
-    #"stop": ["\n\n", "<|im_end|>"] 
+    "max_tokens":500,
     "stop": ["\n\n", "<|im_end|>"] 
 }
 
@@ -227,3 +227,5 @@ style_description = data["choices"][0]["message"]["content"].strip()
 
 print("Extracted Style Description:\n", style_description)
 print(f"Time {total_time:.2f}s  CPU {cpu0}→{cpu1}°C  GPU {gpu0}→{gpu1}°C")
+
+
