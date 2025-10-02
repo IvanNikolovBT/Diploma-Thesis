@@ -116,7 +116,7 @@ class StyleTransfer:
         "Зборови кои означуваат богатство", "Интерпункциски симболи","Составени зборови со цртичка","Оксфордска запирка","Зборови во загради ","Броеви","Издолжени зборови"
         ]
         self.system={"role": "system","content": 
-            ("<s>[INST]Разговор помеѓу љубопитен корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>.")}
+            ("[INST]Разговор помеѓу корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.Ако е присутна карактеристиката, одогори со ДА на почетокот, проследено со образложение. Ако не е присутна, одговори само со НЕ и ништо друго.[/INST]</s>.")}
         
         self.db=PoetryDB()
         self.CSV_PATH="classification/cleaned_songs.csv"
@@ -134,9 +134,11 @@ class StyleTransfer:
     def extract_style_from_song(self,song,target_feature,target_feature_definition):
         
         user_message = (
-        f"{target_feature_definition}\n\n"
+        f"{target_feature_definition}\n Ова ја претставува дефинцијата, не ја давај нејзе, во твојот одгвор\n\n"
         f"Напиши краток опис дали авторот на следниот пасус ја содржи оваа особина: {target_feature}. "
         "Заврши по една реченица/параграф и не продолжувај понатаму.\n\n"
+        "Строго задржи се за овој пасус."
+        "Ако не ја содржи особината, напиши само НЕ."
         f"Пасус:\n{song}\n\nОпис:"
         )
         messages = [self.system,{"role": "user", "content": user_message}]
@@ -144,7 +146,7 @@ class StyleTransfer:
         payload = {
         "model": "trajkovnikola/MKLLM-7B-Instruct",
         "messages": messages,
-        "temperature": 0.3,
+        "temperature": 0.0,
         "repetition_penalty": 0.6,
         "frequency_penalty": 0.4,
         "presence_penalty": 0.3,
@@ -165,7 +167,7 @@ class StyleTransfer:
 
         output_path = os.path.join(output_dir, "extracted_styles.csv") if output_dir else "extracted_styles.csv"
 
-        
+        total_time=0
         file_exists = os.path.exists(output_path)
 
         for _, row in sample_songs.iterrows():
@@ -187,16 +189,17 @@ class StyleTransfer:
                     "song": song,
                     "style_feature_category": category,
                     "extracted_text": extracted_text,
-                    "original_song": original_song,
+                    #"original_song": original_song,
                     "time_needed": time_needed
                 }])
-
+                total_time+=time_needed
                 
                 df_row.to_csv(output_path, mode="a", index=False, header=not file_exists)
                 file_exists = True
 
                 
-                print(f"[SAVED] Author='{author}', Song='{song}', Style='{category}', Time={time_needed:.4f}s")
+                print(f"[SAVED] Author='{author}', Song='{song}', Style='{category}', Time={time_needed:.2f}s")
+            print(f'Total time {total_time:.2f}')
     def iterate_over_author(self,author):
         songs=self.extract_n_random_songs_for_author(author_name=author,number_of_songs=1)
         self.extract_style_from_songs(songs)
