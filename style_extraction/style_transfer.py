@@ -3,7 +3,11 @@ import time
 import subprocess
 import sys
 import threading
-import poetry_DB
+import os
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
+from poetry_DB import PoetryDB
 
 class StyleTransfer:
     
@@ -114,7 +118,7 @@ class StyleTransfer:
         "Зборови кои означуваат мажи", "Зборови кои означуваат жени", "Зборови кои означуваат миленици", "Зборови кои означуваат социјален статус","Зборови кои означуваат сиромаштија",
         "Зборови кои означуваат богатство", "Интерпункциски симболи","Составени зборови со цртичка","Оксфордска запирка","Зборови во загради ","Броеви","Издолжени зборови"
         ]
-        self.db=poetry_DB.PoetryDB()
+        self.db=PoetryDB()
         
     def extract_style_for_author_demo(self,author_name,number_of_songs=10):
         self.db

@@ -337,3 +337,28 @@ class PoetryDB:
             cur.execute("SELECT * FROM o_tolkoven;")
             result = cur.fetchall()
         return result if result else None
+    def get_n_random_songs_from_author(self, author: str, n: int = 10) -> Optional[list[dict]]:
+        """
+        Returns N random songs from the given author as a list of dictionaries.
+        Default: 10 songs.
+        """
+        author_id = self.get_author_id(author)
+        if author_id is None:
+            print(f"[INFO] Author '{author}' not found.")
+            return None
+
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, title, corpus, book_title
+                FROM song
+                WHERE author_id = %s
+                ORDER BY RANDOM()
+                LIMIT %s;
+                """,
+                (author_id, n),
+            )
+            result = cur.fetchall()
+
+        return result if result else None
+        

@@ -10,6 +10,7 @@ import os
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
+from poetry_DB import PoetryDB
 import torch
 import logging
 from langchain.text_splitter import CharacterTextSplitter

@@ -200,7 +200,7 @@ if __name__ == "__main__":
 скокни, не е толку голема
 висината
 """
-    ranked = score_lemmas(sample_text,top_n=40)
+    ranked = score_lemmas(sample_text,top_n=40,extra_texts=all_docs)
 
     print(f"{'Lemma':<20} {'Score':<7} {'TFIDF':<6} {'POS':<7} {'DEP':<8} {'Freq':<4} {'Ent':<5} {'Ch':<3}")
     print("-" * 70)
