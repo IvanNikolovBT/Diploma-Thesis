@@ -171,7 +171,7 @@ class StyleTransfer:
         for _, row in sample_songs.iterrows():
             author = row["author"]
             song = row["song_title"]
-            original_song = row["text"]
+            original_song = row["song_text"]
 
             for category,definition in zip(self.feature_categories,self.feature_definitions):
                 start_time = time.time()
@@ -204,5 +204,5 @@ class StyleTransfer:
     
     
 test=StyleTransfer()
-print(test.extract_n_random_songs_for_author('Блаже Конески'))
+print(test.iterate_over_author('Блаже Конески'))
         
