@@ -7,7 +7,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from poetry_DB import PoetryDB
+import poetry_DB
 class KafeIKnigiScraper:
     BASE_URL = "https://kafeiknigi.com/category/%D0%BF%D0%BE%D0%B5%D0%BC%D0%B8-2/"
 
@@ -17,7 +17,7 @@ class KafeIKnigiScraper:
         """
         self.delay = delay
         self.all_links = []
-        self.db=PoetryDB()
+        self.db=poetryDB.PoetryDB()
     def _get_links_from_page(self, page_num: int) -> list[str]:
         """
         Fetch thumbnail links from a given category page.
