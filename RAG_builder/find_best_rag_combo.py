@@ -1,9 +1,7 @@
 import optuna
-from sentence_transformers import SentenceTransformer
 from vectorbuilder import VectorDBBuilder
 import logging
-import sqlite3
-from pathlib import Path
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

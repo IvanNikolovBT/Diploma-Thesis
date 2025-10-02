@@ -1,5 +1,3 @@
-import os
-import sys
 from pathlib import Path
 import re
 import pdfplumber
@@ -7,13 +5,9 @@ from pdf2image import convert_from_path
 import pytesseract
 from typing import Dict, List
 from langchain.schema import Document
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from poetry_DB import PoetryDB
-from langchain_community.embeddings import HuggingFaceEmbeddings
+import poetry_DB
 import torch
 import logging
-import time
-
 from langchain.text_splitter import CharacterTextSplitter
 
 CHUNK_SIZE = 1000
@@ -34,7 +28,7 @@ class Preprocessor:
         is_separator_regex=False     
     )
         self.ocr_if_needed = ocr_if_needed
-        self.db = PoetryDB()
+        self.db = poetry_DB.PoetryDB()
         
         
     def _get_safe_device(self) -> str:

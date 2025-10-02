@@ -1,14 +1,14 @@
 
 from PIL import Image
 
-from poetry_DB import PoetryDB
-import re,sys,os,pytesseract
+import poetry_DB
+import os,pytesseract
 
 
 class ExtractorPipeline:
     
     def __init__(self):
-        self.db=PoetryDB()
+        self.db=poetry_DB.PoetryDB()
         
     def extract_test_raw(self,image_path:str)->str:
         img = Image.open(image_path)

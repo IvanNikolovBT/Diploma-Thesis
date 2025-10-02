@@ -3,9 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 import re,sys,os
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+
 
 import poetry_DB
 class KafeIKnigiScraper:
@@ -17,7 +15,7 @@ class KafeIKnigiScraper:
         """
         self.delay = delay
         self.all_links = []
-        self.db=poetryDB.PoetryDB()
+        self.db=poetry_DB.PoetryDB()
     def _get_links_from_page(self, page_num: int) -> list[str]:
         """
         Fetch thumbnail links from a given category page.
