@@ -190,30 +190,7 @@ class VectorDBBuilder:
         except Exception as e:
             logger.error(f"Query failed: {e}")
             return {}
-    def query_database_lexical(self,query_text:str,collection_name='lexical_poetry',n_results:int = 5,filters: Optional[Dict]=None):
-        try:
-            collection = self.client.get_collection(collection_name)
-            
-
-            query_embedding = self.model.encode(query_text).tolist()
-            
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=filters,
-                include=["documents", "metadatas", "distances"]
-            )
-            
-            return {
-                "documents": results["documents"][0],
-                "metadatas": results["metadatas"][0],
-                "distances": results["distances"][0]
-            }
-            
-        except Exception as e:
-            logger.error(f"Query failed: {e}")
-            return {}
-        
+    
     def build_database_fully(self):
         """choice = input("Would you like to: \n"
                             "1. Add these documents to existing collection\n"
@@ -227,11 +204,11 @@ class VectorDBBuilder:
         
     def build_dictionary_vdb(self):
         """Build the vector database in batches."""
-        all_entries = self.preprocessor._get_all_from_o_tolkoven()  # full entries with all columns
+        all_entries = self.preprocessor._get_all_from_o_tolkoven()  
 
         
         collection = self.client.get_or_create_collection(
-            name="macedonian_dictionary_v2",  # different name
+            name="macedonian_dictionary_v2", 
             embedding_function=embedding_functions.SentenceTransformerEmbeddingFunction(model_name='sentence-transformers/all-MiniLM-L6-v2')
         )
         
@@ -251,9 +228,98 @@ class VectorDBBuilder:
 
         logger.info(f"Finished adding {len(all_entries)} entries to the vector DB.")
 
-        
-test=VectorDBBuilder()
-test.build_dictionary_vdb() 
+    def query_dictionary_semantic(
+        self,
+        query_text: str,
+        collection_name: str = "macedonian_dictionary_v2",
+        n_results: int = 1
+    ) -> Dict:
+        """
+        Run semantic (embedding) search only.
+        """
+        collection = self.client.get_collection(collection_name)
+        query_embedding = self.model.encode(query_text).tolist()
+        sem_results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"]
+        )
+
+        return {
+            "documents": sem_results["documents"][0],
+            "metadatas": sem_results["metadatas"][0],
+            "distances": sem_results["distances"][0],
+            "source": "semantic"
+        }
+
+
+    def query_dictionary_lexical(
+        self,
+        query_text: str,
+        collection_name: str = "macedonian_dictionary_v2",
+        n_results: int = 1,
+        flag: int = 0
+    ) -> Dict:
+        """
+        Dictionary lookup with flexible modes:
+
+        flag=0 → Try lexical first, if not found use semantic fallback.  
+        flag=1 → Only lexical.  
+        flag=2 → Only semantic.  
+        flag=3 → Return both lexical and semantic.  
+        """
+        try:
+            collection = self.client.get_collection(collection_name)
+
+            
+            lexical_results = collection.get(
+                where={"title": query_text},
+                include=["documents", "metadatas"]
+            )
+
+            if flag == 0:
+                if lexical_results.get("documents"):
+                    return {
+                        "documents": lexical_results["documents"],
+                        "metadatas": lexical_results["metadatas"],
+                        "source": "lexical"
+                    }
+                else:
+                    print(f"Didn’t find an exact match for '{query_text}', searching semantically…")
+                    return self.query_dictionary_semantic(query_text, collection_name, n_results)
+
+            elif flag == 1:
+                if lexical_results.get("documents"):
+                    return {
+                        "documents": lexical_results["documents"],
+                        "metadatas": lexical_results["metadatas"],
+                        "source": "lexical"
+                    }
+                else:
+                    return {"documents": [], "metadatas": [], "source": "lexical"}
+
+            elif flag == 2:
+                return self.query_dictionary_semantic(query_text, collection_name, n_results)
+
+            elif flag == 3:
+                semantic_result = self.query_dictionary_semantic(query_text, collection_name, n_results)
+                return {
+                    "lexical": {
+                        "documents": lexical_results.get("documents", []),
+                        "metadatas": lexical_results.get("metadatas", []),
+                        "source": "lexical"
+                    },
+                    "semantic": semantic_result
+                }
+
+            else:
+                raise ValueError("Invalid flag value. Must be 0, 1, 2, or 3.")
+
+        except Exception as e:
+            logger.error(f"Dictionary query failed: {e}")
+            return {}
+
+
 """if __name__ == "__main__":
     try:
  
