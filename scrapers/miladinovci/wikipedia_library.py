@@ -10,8 +10,8 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 wikipedia.set_lang("mk")
-import poetry_DB 
 
+from poetry_DB import PoetryDB
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry    
 from unidecode import unidecode
@@ -42,7 +42,7 @@ _wikidata_cache: Dict[str, dict] = {}
 
 class WikipediaScraper:
     def __init__(self):
-        self.db = poetry_DB.PoetryDB()
+        self.db = PoetryDB()
         self.session = _session
 
     def api_get(self, params: dict, timeout: float = 10.0) -> dict:
