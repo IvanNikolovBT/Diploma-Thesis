@@ -1,16 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
 import re
-import os,sys
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-from poetry_DB import PoetryDB
+import poetry_DB 
 class TolkovenScraper:
     def __init__(self):
         self.session = requests.Session()
-        self.db=PoetryDB()
+        self.db=poetry_DB.PoetryDB()
     def scrape_entry(self, url):
         try:
             response = self.session.get(url)

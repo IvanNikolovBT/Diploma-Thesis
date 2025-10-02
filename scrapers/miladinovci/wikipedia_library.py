@@ -2,7 +2,6 @@ import sys
 import os
 import requests
 from urllib.parse import quote
-from pprint import pprint
 import wikipedia
 from typing import Optional, List, Dict
 
@@ -11,10 +10,10 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 wikipedia.set_lang("mk")
-from poetry_DB import PoetryDB
+import poetry_DB 
+
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
-# Optional helpers
+from requests.packages.urllib3.util.retry import Retry    
 from unidecode import unidecode
 try:
     import mwparserfromhell
@@ -32,9 +31,7 @@ WIKIDATA_ENTITY_URL = "https://www.wikidata.org/wiki/Special:EntityData/{}.json"
 def make_session():
     s = requests.Session()
     s.headers.update({"User-Agent": "WikipediaScraper/1.0 (you@example.com)"})
-    # lightweight retry strategy
-    from requests.adapters import HTTPAdapter
-    from requests.packages.urllib3.util.retry import Retry
+    
     retries = Retry(total=3, backoff_factor=0.2, status_forcelist=(429, 500, 502, 503, 504))
     s.mount("https://", HTTPAdapter(max_retries=retries))
     return s
@@ -45,7 +42,7 @@ _wikidata_cache: Dict[str, dict] = {}
 
 class WikipediaScraper:
     def __init__(self):
-        self.db = PoetryDB()
+        self.db = poetry_DB.PoetryDB()
         self.session = _session
 
     def api_get(self, params: dict, timeout: float = 10.0) -> dict:
