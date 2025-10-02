@@ -1,14 +1,11 @@
-import requests
-import time
-import subprocess
 import sys
-import threading
 import os
-
+import pandas as pd
+import requests
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 from poetry_DB import PoetryDB
-
+import time
 class StyleTransfer:
     
     def __init__(self):
@@ -118,11 +115,94 @@ class StyleTransfer:
         "Зборови кои означуваат мажи", "Зборови кои означуваат жени", "Зборови кои означуваат миленици", "Зборови кои означуваат социјален статус","Зборови кои означуваат сиромаштија",
         "Зборови кои означуваат богатство", "Интерпункциски симболи","Составени зборови со цртичка","Оксфордска запирка","Зборови во загради ","Броеви","Издолжени зборови"
         ]
-        self.db=PoetryDB()
+        self.system={"role": "system","content": 
+            ("<s>[INST]Разговор помеѓу љубопитен корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>.")}
         
-    def extract_style_for_author_demo(self,author_name,number_of_songs=10):
-        self.db
+        self.db=PoetryDB()
+        self.CSV_PATH="classification/cleaned_songs.csv"
+        self.df=pd.read_csv(self.CSV_PATH)
+        self.random_seed=47
+        
+        
+    def extract_n_random_songs_for_author(self, author_name='Блаже Конески', number_of_songs=10):
+        author_songs = self.df[self.df['author'] == author_name]
+        return author_songs.sample(
+            n=min(number_of_songs, len(author_songs)),
+            random_state=None  
+        )
+    
+    def extract_style_from_song(self,song,target_feature,target_feature_definition):
+        
+        user_message = (
+        f"{target_feature_definition}\n\n"
+        f"Напиши краток опис дали авторот на следниот пасус ја содржи оваа особина: {target_feature}. "
+        "Заврши по една реченица/параграф и не продолжувај понатаму.\n\n"
+        f"Пасус:\n{song}\n\nОпис:"
+        )
+        messages = [self.system,{"role": "user", "content": user_message}]
+
+        payload = {
+        "model": "trajkovnikola/MKLLM-7B-Instruct",
+        "messages": messages,
+        "temperature": 0.3,
+        "repetition_penalty": 0.6,
+        "frequency_penalty": 0.4,
+        "presence_penalty": 0.3,
+        "top_p": 0.9,
+        "max_tokens":500,
+        "stop": ["\n\n", "<|im_end|>"]}
+        
+        resp = requests.post("http://127.0.0.1:8080/v1/chat/completions",
+        headers={"Content-Type": "application/json"},
+        json=payload)
+        
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+        
+    def extract_style_from_songs(self, sample_songs=[], output_dir=''):
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        output_path = os.path.join(output_dir, "extracted_styles.csv") if output_dir else "extracted_styles.csv"
+
+        
+        file_exists = os.path.exists(output_path)
+
+        for _, row in sample_songs.iterrows():
+            author = row["author"]
+            song = row["song_title"]
+            original_song = row["text"]
+
+            for category,definition in zip(self.feature_categories,self.feature_definitions):
+                start_time = time.time()
+
+                extracted_text=self.extract_style_from_song(song,category,definition)
+                
+                end_time = time.time()
+                time_needed = end_time - start_time
+
+                
+                df_row = pd.DataFrame([{
+                    "author": author,
+                    "song": song,
+                    "style_feature_category": category,
+                    "extracted_text": extracted_text,
+                    "original_song": original_song,
+                    "time_needed": time_needed
+                }])
+
+                
+                df_row.to_csv(output_path, mode="a", index=False, header=not file_exists)
+                file_exists = True
+
+                
+                print(f"[SAVED] Author='{author}', Song='{song}', Style='{category}', Time={time_needed:.4f}s")
+    def iterate_over_author(self,author):
+        songs=self.extract_n_random_songs_for_author(author_name=author,number_of_songs=1)
+        self.extract_style_from_songs(songs)
+        
+    
     
 test=StyleTransfer()
-print(len(test.feature_definitions))
+print(test.extract_n_random_songs_for_author('Блаже Конески'))
         
