@@ -7,7 +7,6 @@ from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
 from preprocessor import Preprocessor
 
-# --- Setup ---
 nlp = spacy.load("mk_core_news_lg")
 ALLOWED_POS = {"NOUN", "PROPN", "ADJ", "VERB", "ADV"}
 

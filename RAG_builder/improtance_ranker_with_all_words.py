@@ -1,6 +1,5 @@
 import math
 from collections import Counter, defaultdict
-from pprint import pprint
 from preprocessor import Preprocessor  
 import spacy
 from rank_bm25 import BM25Okapi

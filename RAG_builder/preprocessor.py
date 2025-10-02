@@ -5,7 +5,11 @@ from pdf2image import convert_from_path
 import pytesseract
 from typing import Dict, List
 from langchain.schema import Document
-import poetry_DB
+import sys
+import os
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
 import torch
 import logging
 from langchain.text_splitter import CharacterTextSplitter
@@ -28,7 +32,7 @@ class Preprocessor:
         is_separator_regex=False     
     )
         self.ocr_if_needed = ocr_if_needed
-        self.db = poetry_DB.PoetryDB()
+        self.db = PoetryDB()
         
         
     def _get_safe_device(self) -> str:
