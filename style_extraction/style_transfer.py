@@ -6,7 +6,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 from poetry_DB import PoetryDB
 import time
-import re 
+import datetime
 class StyleTransfer:
     
     def __init__(self):
@@ -200,51 +200,266 @@ class StyleTransfer:
             (self.df['author']== author) & (self.df['song']==title) &
             (self.df['extracted_text'].str.match(pattern, na=False))
         ]
-    def apply_styles_all_at_once(self,styles,st_song_text,st_song_title,st_author):
-            song=st_song_text
-            
-            for style in styles:
+    def apply_styles_iterative(self, styles, st_song_text, st_song_title, st_author, log_path=None):
+    
+        song = st_song_text
+
+        
+        if log_path is None:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_path = f"song_style_log_{st_song_title or 'song'}_{ts}.txt"
+            log_path = "".join(c for c in log_path if c.isalnum() or c in (' ','.','_','-')).rstrip()
+
+        log_dir = os.path.dirname(log_path)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
+        cumulative = 0.0
+        total_styles = len(styles)
+
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            for i, (_, row) in enumerate(styles.iterrows()):
+                target_feature = row['style_feature_category']
+                target_feature_definition = self.styles_map.get(target_feature, "")
                 user_message = (
-                f"{target_feature_definition}\n Ова ја претставува дефинцијата, не ја давај нејзе, во твојот одгвор\n\n"
-                f"Искористи ја оваа особина во песната: {target_feature}. "
-                f"Пасус:\n{song}\n\nОпис:"
+                    f"{target_feature_definition}\n Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор\n\n"
+                    f"Искористи ја оваа особина {target_feature} ВРЗ песната: .\n"
+                    f"Како одговор врати ја назад песната, но со применет {target_feature} врз нејзе. Оваа е клучно.\n"
+                    f"Пасус:\n{song}\n\n Обработена песна:"
                 )
-                messages = [self.system,{"role": "user", "content": user_message}]
+                new_system={"role": "system","content": 
+                ("[INST]Разговор помеѓу корисник и разговорник  за применување на  стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>.")}
+        
+                messages = [new_system, {"role": "user", "content": user_message}]
 
                 payload = {
+                    "model": "trajkovnikola/MKLLM-7B-Instruct",
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "top_p": 0.9,
+                    "repetition_penalty": 0.3,
+                    "frequency_penalty": 0.2,
+                    "presence_penalty": 0.15,
+                    'stop': ["\n\n\n", "<|im_end|>"]
+                }
+
+                
+                start_time = time.time()
+                try:
+                    resp = requests.post(
+                        "http://127.0.0.1:8080/v1/chat/completions",
+                        headers={"Content-Type": "application/json"},
+                        json=payload,
+                        timeout=200
+                    )
+                    duration = time.time() - start_time
+
+                    if resp.ok:
+                        data = resp.json()
+                        new_song = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+                        if not new_song:
+                            # Keep using the previous song if response is empty
+                            new_song = song
+                            note = f" (empty response — kept previous song text)"
+                        else:
+                            note = ""
+                    else:
+                        new_song = song
+                        note = f" (request failed: status {resp.status_code})"
+
+                except Exception as e:
+                    duration = time.time() - start_time
+                    new_song = song
+                    note = f" (exception during request: {e})"
+
+                cumulative += duration
+                song = new_song
+
+                
+                print("\n" + "="*40)
+                print(f"Iteration {i+1}/{total_styles} - style added: {target_feature}")
+                print(f"Duration: {duration:.3f} s{note}")
+                print("-" * 40)
+                print(song)
+                print("="*40 + "\n")
+
+                log_file.write(f"--- Iteration {i+1} / {total_styles} ---\n")
+                log_file.write(f"Style added: {target_feature}\n")
+                log_file.write(f"Author: {st_author}\n")
+                log_file.write(f"Song title: {st_song_title}\n")
+                log_file.write(f"Duration (s): {duration:.3f}\n")
+                log_file.write(f"Cumulative duration (s): {cumulative:.3f}\n")
+                if note:
+                    log_file.write(f"Note: {note}\n")
+                log_file.write("Resulting song:\n")
+                log_file.write(song + "\n\n")
+                log_file.flush()
+
+        return song, log_path
+    def apply_styles_all_at_once(self,styles,st_song_text):
+           
+            song=st_song_text
+            target_features=[]
+            target_feature_definitions=[]
+            max_words=len(st_song_text)
+           
+            for _, row in styles.iterrows():
+                target_feature=row['style_feature_category']
+                target_features.append(target_feature)
+                target_feature_definitions.append(self.styles_map[target_feature])
+            print(target_feature_definitions)
+            user_message = (
+                f"{target_feature_definitions}\n Овие се дефинциите на стиловите, не ги давај нив, во твојот одгвор\n\n"
+                f"Примени ги овие стилови  во песната: {target_features}. "
+                f"Пасус:\n{song}\n\nОпис:"
+                )
+            user_message_2 = (
+                f"Примени ги овие стилови врз песната: {target_features}. Не ја повторувај истата песна, мора да е изменета со дадените стилови, но содржината да е иста. "
+                f"Пасус:\n{song}\n\nОпис:"
+                )
+            messages = [self.system_prompt,{"role": "user", "content": user_message_2}]
+
+            payload = {
                 "model": "trajkovnikola/MKLLM-7B-Instruct",
                 "messages": messages,
-                "temperature": 0.0,
-                "repetition_penalty": 0.6,
-                "frequency_penalty": 0.4,
-                "presence_penalty": 0.3,
+                "temperature": 0.3,
+                "repetition_penalty": 0.3,
+                "frequency_penalty": 0.2,
+                "presence_penalty": 0.15,
                 "top_p": 0.9,
-                "max_tokens":500,
-                "stop": ["\n\n", "<|im_end|>"]}
-                
-                resp = requests.post("http://127.0.0.1:8080/v1/chat/completions",
-                headers={"Content-Type": "application/json"},
-                json=payload) 
-                
-                data = resp.json()
-                song=data["choices"][0]["message"]["content"].strip()
+                "max_tokens":max_words,
+                'stop':'<|im_end|>"'}
+            start=time.time()   
+            resp = requests.post("http://127.0.0.1:8080/v1/chat/completions",
+            headers={"Content-Type": "application/json"},
+            json=payload) 
+            print(f'Time needed {time.time()-start}') 
+            data = resp.json()
+            return data["choices"][0]["message"]["content"].strip()
         
-            return song
-    def apply_styles_itterative(self,):
-        pass
-    def transfer_style(#self,sf_author,sf_song_text,sf_song_title,st_author,st_song_text,st_song_title): 
-        self,sf_author,sf_song_title):
+    def transfer_style(self,sf_author,sf_song_title,st_author,st_song_text,st_song_title): 
+        #self,sf_author,sf_song_title):
         selected=self.get_present_styles_for_song(sf_song_title,sf_author)
-        print(len(selected))
-        for _, row in selected.iterrows():
-            print(row)
+        print(selected)
+        return self.apply_styles_iterative(styles=selected,st_song_text=st_song_text,st_song_title=st_song_title,st_author=st_author)
+        
          
             
 test=StyleTransfer()
-print(test.transfer_style('Блаже Конески','Бура'))
+st_song_title=';Молитва'
+st_author='Гане Тодоровски'
+st_song="""Молитва – Гане Тодоровски
+
+(пред крајот на годината
+и пред истекот на векот)
+
+Боже, зарем ќе оставиш да бидам неразбран
+Од современиците мои – што ги мунѕосував ко џган!
+Зарем ќе оставиш да останам во уплав збран
+И да си заминам од веков – од мунѕосаните мунѕосан?
+Придај им на моите сотатковинци додатен ум,
+За да ме доразберат, и да ме следат молчешкум;
+Не ги прекорувај престрого, не кревај ненужен шум,
+Поучи ги, кога зборувам, да стојат отпростум!
+
+За да се знае, конечно еднаш, КОЈ е КОЈ?
+За да не понесам вина, дека, дури бев жив
+Малцина надзборев а трижтолкумина не победив!
+
+Господе, дај искористи го авторитетот свој,
+Па, додека е време, застани на моја страна,
+За да поверувам дека ѝ бев на вистината бранач!
+
+Москва, декември 1994 г."""
+
+
+print(test.transfer_style('Блаже Конески','Бура',st_author=st_author,st_song_text=st_song,st_song_title=st_song_title))
         
         
-        
+st_author_hard='Кочо Рацин'
+st_song_title_hard='Балада за непознатиот'
+st_song_hard="""Балада за непознатиот – Кочо Рацин
+
+Натаму – в поле битолско
+чемрее врба проклета –
+под врбата незнаен гроб,
+в гроб лежи војник непознат.
+
+Лежи од војна световна,
+лежи — и веќе земјосал —
+силно го тага изела
+задека тука загинал.
+
+Никој крај него немаше –
+вишното небе врз него,
+земјата скришна под него,
+над гробот врба стушена.
+
+А таде – в гори зелени
+в сума гробишта лежеа
+делии – одбор јунаци
+за татковина паднати.
+
+В полноќ се над ним дрвјата
+од жалба силна свиваа –
+горските бистри езерца
+в силна светлина светеа.
+
+И од ним – самовилите
+една по една идеа –
+од гроб до гроб го дигаа
+јунак до јунак – на оро.
+
+И кога сите минеа
+покрај врбата стушена –
+делии се запираа
+незнаен брат си викаа:
+
+„Ја стани, море јабанец
+на оро со самовили!
+Зора се зори – петлите
+скоро ќе в село пропеат!”
+
+А тој од гробот тепкаше
+дума врз дума чемерна: –
+„Минете, браќа, врвете,
+не сум ви лика – прилика!
+
+Кој умрел за татковина
+и за човечки правдини –
+каде вас, братко, не гинел,
+со вас до векот живеел.
+
+Вие му песна пеете,
+вие го с песна жалите –
+така се сите раѓате
+и така си умирате!
+
+А тука – зошто паднав ја?
+зошто ме куршум прониза,
+зошто ме земја притисна –
+за кого лудо загинав?
+
+Кажете, браќа, кажете,
+кажете – па поминете –
+мене ме ништо не дига,
+мојата смрт е – карасмрт!”
+
+Делии глави веднеа,
+немеа самовилите –
+тешко на тија, горко им
+така што гинат на војна!
+
+Немеа – туку петлите
+в селото веднаш писнаа –
+самовилите в горите
+с делии в раци лиснаа!
+
+Пусто остана полето,
+пусто зазори зората –
+чемрее в поле врбата,
+чемрее – тажи непознат."""       
 """Original song Бура – Блаже Конески
 
 Колку ненадно иде бурата.
@@ -260,3 +475,27 @@ print(test.transfer_style('Блаже Конески','Бура'))
 како човечкото во тебе да плаче –
 дали ќе можеш?
 """
+
+
+
+
+intereesting_analysis="""Вашата песна е напишана во стилот на македонската народна поезија. Овој стил е карактеристичен по тоа што се одликува со употреба на фигуративен јазик, активен глас, грешки во согласување, машки и женски заменки, бидување љубезно/несигурно/колебливо, увид, сè или ништо размислување и пцовки. Исто така, песната содржи научни зборови и оксфордска запирка.
+
+Во песната се користат фигуративни изрази кои ја збогатуваат и ја подобруваат нејзината содржина. На пример, во стиховите "Под врбата незнаен гроб" и "В гори зелени/в сума гробишта лежеа", се користи фигуративниот израз "незнаен гроб" и "зелени гробишта", кои ја нагласуваат тагата и болката на војникот.
+
+Во песната се користат активни форми на глаголи, што дава чувство на директност и акција. На пример, во стиховите "Лежи од војна световна" и "Силно го тага изела", се користат активни форми на глаголите "лежи" и "тага".
+
+Во песната се користат машки и женски заменки, што ја збогатуваат нејзината содржина. На пример, во стиховите "Никој крај него немаше" и "Делии – одбор јунаци", се користат машки и женски заменки.
+
+Во песната се користи бидување љубезно/несигурно/колебливо, што дава чувство на емоции и личност. На пример, во стиховите "Ние му песна пеете" и "Вие го с песна жалите", се користи бидување љубезно/несигурно/колебливо.
+
+Во песната се користи увид, што дава чувство на перспектива и длабочина. На пример, во стиховите "Лежи од војна световна" и "Силно го тага изела", се користи увид.
+
+Во песната се користи сè или ништо размислување, што дава чувство на драматичност и контраст. На пример, во стиховите "Минете, браќа, врвете" и "Мене ме ништо не дига", се користи сè или ништо размислување.
+
+Во песната се користат пцовки, што ја збогатуваат нејзината содржина и даваат чувство на автентичност. На пример, во стиховите "Минете, браќа, врвете" и "Мене ме ништо не дига", се користат пцовки.
+
+Во песната се користат научни зборови, што ја збогатуваат нејзината содржина и даваат чувство на експертиза. На пример, во стиховите "В полноќ се над ним дрвјата/од жалба силна свиваа" и "Горските бистри езерца/в силна светлина светеа", се користат научни зборови.
+
+Во песната се користи оксфордска запирка, што ја збогатува нејзината содржина и дава чувство на елеганција. На пример, во стиховите "В гори зелени/в сума гробишта лежеа", се користи оксфордска запирка.
+        """
