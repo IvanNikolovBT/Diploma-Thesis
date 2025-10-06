@@ -6,6 +6,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 from poetry_DB import PoetryDB
 import time
+import re 
 class StyleTransfer:
     
     def __init__(self):
@@ -116,12 +117,13 @@ class StyleTransfer:
         "Зборови кои означуваат богатство", "Интерпункциски симболи","Составени зборови со цртичка","Оксфордска запирка","Зборови во загради ","Броеви","Издолжени зборови"
         ]
         self.system={"role": "system","content": 
-            ("[INST]Разговор помеѓу корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.Ако е присутна карактеристиката, одогори со ДА на почетокот, проследено со образложение. Ако не е присутна, одговори само со НЕ и ништо друго.[/INST]</s>.")}
+            ("[INST]Разговор помеѓу корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.Ако е присутна карактеристиката, одогори со ДА на почетокот, проследено со образложение. Ако не е присутна, одговори само со НЕ и ништо друго.Оцени го присуството од 0 до 1 на стилот.[/INST]</s>.")}
         
         self.db=PoetryDB()
         self.CSV_PATH="classification/cleaned_songs.csv"
         self.df=pd.read_csv(self.CSV_PATH)
         self.random_seed=47
+        self.styles_path='extracted_styles.csv'
         
         
     def extract_n_random_songs_for_author(self, author_name='Блаже Конески', number_of_songs=10):
@@ -199,13 +201,76 @@ class StyleTransfer:
 
                 
                 print(f"[SAVED] Author='{author}', Song='{song}', Style='{category}', Time={time_needed:.2f}s")
+            
             print(f'Total time {total_time:.2f}')
+            print(f'Original song {original_song}')
     def iterate_over_author(self,author):
         songs=self.extract_n_random_songs_for_author(author_name=author,number_of_songs=1)
         self.extract_style_from_songs(songs)
+
+    def get_present_styles_for_song(self, title, author):
+        self.df = pd.read_csv(self.styles_path)
+        pattern = r'^Да' 
+        return self.df[
+            (self.df['author']== author) & (self.df['song']==title) &
+            (self.df['extracted_text'].str.match(pattern, na=False))
+        ]
+    def apply_styles_all_at_once(self,styles,st_song_text,st_song_title,st_author):
+            song=st_song_text
+            
+            for style in styles:
+                user_message = (
+                f"{target_feature_definition}\n Ова ја претставува дефинцијата, не ја давај нејзе, во твојот одгвор\n\n"
+                f"Искористи ја оваа особина во песната: {target_feature}. "
+                f"Пасус:\n{song}\n\nОпис:"
+                )
+                messages = [self.system,{"role": "user", "content": user_message}]
+
+                payload = {
+                "model": "trajkovnikola/MKLLM-7B-Instruct",
+                "messages": messages,
+                "temperature": 0.0,
+                "repetition_penalty": 0.6,
+                "frequency_penalty": 0.4,
+                "presence_penalty": 0.3,
+                "top_p": 0.9,
+                "max_tokens":500,
+                "stop": ["\n\n", "<|im_end|>"]}
+                
+                resp = requests.post("http://127.0.0.1:8080/v1/chat/completions",
+                headers={"Content-Type": "application/json"},
+                json=payload) 
+                
+                data = resp.json()
+                song=data["choices"][0]["message"]["content"].strip()
         
-    
-    
+        return song
+    def apply_styles_itterative(self,):
+    def transfer_style(#self,sf_author,sf_song_text,sf_song_title,st_author,st_song_text,st_song_title): 
+        self,sf_author,sf_song_title):
+        selected=self.get_present_styles_for_song(sf_song_title,sf_author)
+        print(len(selected))
+        for _, row in selected.iterrows():
+            print(row)
+         
+            
 test=StyleTransfer()
-print(test.iterate_over_author('Блаже Конески'))
+print(test.transfer_style('Блаже Конески','Бура'))
         
+        
+        
+"""Original song Бура – Блаже Конески
+
+Колку ненадно иде бурата.
+В поле се мрачи, разлава ветар буен.
+Демнеме. Сега прва молна ќe светне,
+во нас ќe запали силен гнев.
+Грмовни тонови, груби, искинати,
+и настрвени како душите што ни се
+дека во крвје тонеме.
+А дали ќe можеш и тивка песна да зачуеш,
+како цвет на гради стиснат,
+сон, оти смевнато девојче ќe видиш,
+како човечкото во тебе да плаче –
+дали ќе можеш?
+"""
