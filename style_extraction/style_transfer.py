@@ -6,6 +6,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 from poetry_DB import PoetryDB
 import time
+from tqdm import tqdm
 import datetime
 class StyleTransfer:
     
@@ -117,6 +118,8 @@ class StyleTransfer:
             n=min(number_of_songs, len(author_songs)),
             random_state=None  
         )
+    def extract_all_songs_for_author(self, author_name='Блаже Конески'):
+        return self.df[self.df['author'] == author_name]
     
     def extract_style_from_song(self,song,target_feature,target_feature_definition):
         
@@ -188,7 +191,6 @@ class StyleTransfer:
                 print(f"[SAVED] Author='{author}', Song='{song}', Style='{category}', Time={time_needed:.2f}s")
             
             print(f'Total time {total_time:.2f}')
-            print(f'Original song {original_song}')
     def iterate_over_author(self,author):
         songs=self.extract_n_random_songs_for_author(author_name=author,number_of_songs=1)
         self.extract_style_from_songs(songs)
@@ -221,15 +223,28 @@ class StyleTransfer:
             for i, (_, row) in enumerate(styles.iterrows()):
                 target_feature = row['style_feature_category']
                 target_feature_definition = self.styles_map.get(target_feature, "")
+                
+                example_1="Особина:Сарказам\nОригинално: Денес работев цел ден без пауза.\nСо „Сарказам“: О, прекрасно, токму тоа ми требаше — уште еден ден без одмор!\n"
+                example_2="Особина:Активен глас\nОригинално: Писмото беше испратено од мене.\nСо „Активен глас“: Јас го испратив писмото\n"
+                
                 user_message = (
                     f"{target_feature_definition}\n Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор\n\n"
                     f"Искористи ја оваа особина {target_feature} ВРЗ песната: .\n"
                     f"Како одговор врати ја назад песната, но со применет {target_feature} врз нејзе. Оваа е клучно.\n"
+                    f"Следувват два примери:\n"
+                    f'{example_1}'
+                    f'{example_2}'
                     f"Пасус:\n{song}\n\n Обработена песна:"
                 )
+                
+               
                 new_system={"role": "system","content": 
                 ("[INST]Разговор помеѓу корисник и разговорник  за применување на  стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>.")}
-        
+                #probaj so indivdualni primeri pomali 
+                #predefinirani stilovi na ekstrakjcija i da proveri dali e prisuten
+                # (/) vsushnost razlika na stilovi
+                #ostavi default
+                #podobro odednash site i da se zpaishi akko zakluchok
                 messages = [new_system, {"role": "user", "content": user_message}]
 
                 payload = {
@@ -237,12 +252,25 @@ class StyleTransfer:
                     "messages": messages,
                     "temperature": 0.2,
                     "top_p": 0.9,
-                    "repetition_penalty": 0.3,
+                    "repetition_penalty": 2,
+                    'early_stopping':True,
                     "frequency_penalty": 0.2,
                     "presence_penalty": 0.15,
-                    'stop': ["\n\n\n", "<|im_end|>"]
+                    'stop': ["<|im_end|>"],
+                    "max_tokens":len(song),
                 }
-
+                """"output_ids = self.model.generate(input_ids=data_x_input_ids,
+                                                 attention_mask=data_x_attention_mask,
+                                                 max_new_tokens=max_length,
+                                                 eos_token_id=tokenizer.eos_token_id,
+                                                 pad_token_id=tokenizer.pad_token_id,
+                                                 early_stopping=True,
+                                                 num_return_sequences=1,
+                                                 # no_repeat_ngram_size=2,
+                                                 # repetition_penalty=2.0,
+                                                 do_sample=False,
+                                                 # top_p=0.5
+                                                 )"""
                 
                 start_time = time.time()
                 try:
@@ -259,7 +287,6 @@ class StyleTransfer:
                         new_song = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
                         if not new_song:
-                            # Keep using the previous song if response is empty
                             new_song = song
                             note = f" (empty response — kept previous song text)"
                         else:
@@ -300,31 +327,53 @@ class StyleTransfer:
     def apply_styles_all_at_once(self,styles,st_song_text):
            
             song=st_song_text
-            target_features=[]
-            target_feature_definitions=[]
             max_words=len(st_song_text)
            
+            target_features = []
+            target_feature_definitions = []
+
             for _, row in styles.iterrows():
-                target_feature=row['style_feature_category']
+                target_feature = row['style_feature_category']
                 target_features.append(target_feature)
                 target_feature_definitions.append(self.styles_map[target_feature])
-            print(target_feature_definitions)
+
+            # Join definitions in a readable numbered format
+            definitions_text = "Дефиниции на особини:\n" + "\n".join(
+                [f"{i+1}. {target_features[i]} – {target_feature_definitions[i]}" for i in range(len(target_features))]
+            )
+
+            example_1 = (
+                "Особина: Сарказам\n"
+                "Оригинално: Денес работев цел ден без пауза.\n"
+                "Со „Сарказам“: О, прекрасно, токму тоа ми требаше — уште еден ден без одмор!\n"
+            )
+            example_2 = (
+                "Особина: Активен глас\n"
+                "Оригинално: Писмото беше испратено од мене.\n"
+                "Со „Активен глас“: Јас го испратив писмото.\n"
+            )
+
             user_message = (
-                f"{target_feature_definitions}\n Овие се дефинциите на стиловите, не ги давај нив, во твојот одгвор\n\n"
-                f"Примени ги овие стилови  во песната: {target_features}. "
-                f"Пасус:\n{song}\n\nОпис:"
-                )
-            user_message_2 = (
-                f"Примени ги овие стилови врз песната: {target_features}. Не ја повторувај истата песна, мора да е изменета со дадените стилови, но содржината да е иста. "
-                f"Пасус:\n{song}\n\nОпис:"
-                )
-            messages = [self.system_prompt,{"role": "user", "content": user_message_2}]
+                f"{definitions_text}\n"
+                f"Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор.\n\n"
+                f"Искористи ја оваа особина {target_feature} ВРЗ песната.\n"
+                f"Како одговор врати ја назад песната, но со применет {target_feature} врз нејзе. Оваа е клучно.\n"
+                f"Следуваат два примери:\n"
+                f"{example_1}"
+                f"{example_2}"
+                f"Пасус:\n{song}\n\nОбработена песна:"
+            )
+               
+            new_system={"role": "system","content": 
+                ("[INST]Разговор помеѓу корисник и разговорник  за применување на  стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>.")}
+            
+            messages = [new_system,{"role": "user", "content": user_message}]
 
             payload = {
                 "model": "trajkovnikola/MKLLM-7B-Instruct",
                 "messages": messages,
-                "temperature": 0.3,
-                "repetition_penalty": 0.3,
+                "temperature": 0.2,
+                "repetition_penalty": 2.0,
                 "frequency_penalty": 0.2,
                 "presence_penalty": 0.15,
                 "top_p": 0.9,
@@ -342,9 +391,87 @@ class StyleTransfer:
         #self,sf_author,sf_song_title):
         selected=self.get_present_styles_for_song(sf_song_title,sf_author)
         print(selected)
-        return self.apply_styles_iterative(styles=selected,st_song_text=st_song_text,st_song_title=st_song_title,st_author=st_author)
+        return self.apply_styles_all_at_once(styles=selected,st_song_text=st_song_text)
+    def extract_style_from_songs(self, songs_csv, output_dir='', save_every=20):    
+        if not os.path.exists(songs_csv):
+            raise FileNotFoundError(f"CSV file not found: {songs_csv}")
+        sample_songs = pd.read_csv(songs_csv)
+        print(f"📄 Loaded {len(sample_songs)} songs from {songs_csv}")
+
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        output_path = os.path.join(output_dir, "extracted_styles.csv") if output_dir else "extracted_styles.csv"
+
         
-         
+        if os.path.exists(output_path):
+            existing_df = pd.read_csv(output_path)
+            processed = set(zip(
+                existing_df["author"],
+                existing_df["song"],
+                existing_df["style_feature_category"]
+            ))
+            print(f"🔁 Found existing file with {len(processed)} processed entries. Resuming...")
+            file_exists = True
+        else:
+            processed = set()
+            file_exists = False
+            print("🆕 No existing file found. Starting fresh.")
+
+        buffer = []
+        total_time = 0.0
+        counter = 0
+
+        total_items = len(sample_songs) * len(self.styles_map)
+        pbar = tqdm(total=total_items, desc="Extracting styles", ncols=100)
+
+        for _, row in sample_songs.iterrows():
+            author = row["author"]
+            song = row["song_title"]
+            
+
+            for category, definition in self.styles_map.items():
+                key = (author, song, category)
+                if key in processed:
+                    pbar.update(1)
+                    continue
+
+                start_time = time.time()
+                try:
+                    extracted_text = self.extract_style_from_song(song, category, definition)
+                except Exception as e:
+                    print(f"❌ Error processing {key}: {e}")
+                    pbar.update(1)
+                    continue
+
+                time_needed = time.time() - start_time
+                total_time += time_needed
+
+                buffer.append({
+                    "author": author,
+                    "song": song,
+                    "style_feature_category": category,
+                    "extracted_text": extracted_text,
+                    "time_needed": time_needed
+                })
+                processed.add(key)
+                counter += 1
+                pbar.update(1)
+
+                
+                if counter % save_every == 0:
+                    pd.DataFrame(buffer).to_csv(output_path, mode="a", index=False, header=not file_exists)
+                    file_exists = True
+                    buffer = []
+                    print(f"💾 Progress saved ({counter} items processed so far).")
+
+        
+        if buffer:
+            pd.DataFrame(buffer).to_csv(output_path, mode="a", index=False, header=not file_exists)
+            print("💾 Final save completed.")
+
+        pbar.close()
+        print(f"\n🏁 Extraction complete. Total time: {total_time:.2f}s")  
             
 test=StyleTransfer()
 st_song_title=';Молитва'
@@ -374,7 +501,12 @@ st_song="""Молитва – Гане Тодоровски
 Москва, декември 1994 г."""
 
 
-print(test.transfer_style('Блаже Конески','Бура',st_author=st_author,st_song_text=st_song,st_song_title=st_song_title))
+test.extract_style_from_songs(
+    songs_csv="classification/cleaned_songs.csv",
+    output_dir="results/",
+    save_every=20  
+)
+#print(test.transfer_style('Блаже Конески','Бура',st_author=st_author,st_song_text=st_song,st_song_title=st_song_title))
         
         
 st_author_hard='Кочо Рацин'
@@ -410,7 +542,11 @@ st_song_hard="""Балада за непознатиот – Кочо Рацин
 една по една идеа –
 од гроб до гроб го дигаа
 јунак до јунак – на оро.
-
+./build/bin/llama-server \
+  --model /home/ivan/.cache/llama.cpp/NikolayKozloff_MKLLM-7B-Q8_0-GGUF_mkllm-7b-q8_0.gguf \
+  --port 8080 \
+  --n-gpu-layers 999 \
+  --ctx-size 2048
 И кога сите минеа
 покрај врбата стушена –
 делии се запираа
