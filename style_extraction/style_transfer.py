@@ -15,12 +15,12 @@ class StyleTransferLocal:
     def __init__(self,model="trajkovnikola/MKLLM-7B-Instruct"):
 
         self.system={"role": "system","content": 
-            ("[INST]Разговор помеѓу корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.Ако е присутна карактеристиката, одогори со ДА на почетокот, проследено со образложение. Ако не е присутна, одговори само со НЕ и ништо друго.Оцени го присуството од 0 до 1 на стилот.[/INST]</s>.")}        
+            ("[INST]Разговор помеѓу корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.Ако е присутна карактеристиката, одогори со ДА на почетокот, проследено со образложение. Ако не е присутна, одговори само со НЕ и ништо друго.[/INST]</s>.")}        
         self.db=PoetryDB()
         self.CSV_PATH="classification/cleaned_songs.csv"
         self.df=pd.read_csv(self.CSV_PATH)
         self.random_seed=47
-        self.styles_path='extracted_styles.csv'
+        self.styles_path='style_extraction/vezilka_test.cvs'
         self.model=model
         self.styles=self.load_styles()
     
@@ -69,9 +69,9 @@ class StyleTransferLocal:
         user_message_vezilka = (
             f"{target_feature_definition}\n"
             "Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор.\n\n"
-            f"Напиши краток опис дали авторот на следниот пасус ја содржи оваа особина: {target_feature}.\n"
-            "Одговори со Да или Не.\n\n"
-            "Следуваат неколку примери:\n\n"
+            f"Одговори на пашањето дали авторот на следниот пасус ја содржи оваа особина: {target_feature}.\n"
+            "Одговори со Да,присутно! или Не!.\n\n"
+            "Биди многу строг при својата одлука, ако си сигурен дека е присутна карактеристиката, тогаш запиши одогори со да."
             f"Пасус:\n{song}\n\nОпис:"
         )
         messages = [self.system,{"role": "user", "content": user_message_vezilka}]
@@ -89,7 +89,7 @@ class StyleTransferLocal:
         payload_vezilka = {
         "model": self.model,
         "messages": messages,
-        "temperature": 0.5,
+        "temperature": 0.4,
         "top_p": 0.9,
         "max_tokens":200,
         "stop": ["\n","\n\n","<|im_end|>"]}
@@ -151,7 +151,7 @@ class StyleTransferLocal:
             (self.df['author']== author) & (self.df['song']==title) &
             (self.df['extracted_text'].str.match(pattern, na=False))
         ]
-    def apply_styles_iterative(self, styles, st_song_text, st_song_title, st_author, log_path=None):
+    def apply_styles_iterative(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
     
         song = st_song_text
 
@@ -166,10 +166,10 @@ class StyleTransferLocal:
             os.makedirs(log_dir, exist_ok=True)
 
         cumulative = 0.0
-        total_styles = len(styles)
+        total_styles = len(sf_styles)
 
         with open(log_path, "a", encoding="utf-8") as log_file:
-            for i, (_, row) in enumerate(styles.iterrows()):
+            for i, (_, row) in enumerate(sf_styles.iterrows()):
                 target_feature = row['style_feature_category']
                 target_feature_definition = self.styles.get(target_feature, "")
                 
@@ -273,74 +273,84 @@ class StyleTransferLocal:
                 log_file.flush()
 
         return song, log_path
-    def apply_styles_all_at_once(self,styles,st_song_text):
-           
-            song=st_song_text
-            max_words=len(st_song_text)
-           
-            target_features = []
-            target_feature_definitions = []
-
-            for _, row in styles.iterrows():
-                target_feature = row['style_feature_category']
+    def apply_styles_all_at_once(self, sf_styles, st_song_text,st_styles):
+        song = st_song_text
+        max_words = len(st_song_text.split()) 
+        target_features = []
+        target_feature_definitions = []
+        
+        
+        for _, row in sf_styles.iterrows():
+            target_feature = row['style_feature_category']
+            if target_feature not in st_styles['style_feature_category'].values:
                 target_features.append(target_feature)
                 target_feature_definitions.append(self.styles[target_feature])
-
-            
-            definitions_text = "Дефиниции на особини:\n" + "\n".join(
-                [f"{i+1}. {target_features[i]} – {target_feature_definitions[i]}" for i in range(len(target_features))]
-            )
-
-            example_1 = (
-                "Особина: Сарказам\n"
-                "Оригинално: Денес работев цел ден без пауза.\n"
-                "Со „Сарказам“: О, прекрасно, токму тоа ми требаше — уште еден ден без одмор!\n"
-            )
-            example_2 = (
-                "Особина: Активен глас\n"
-                "Оригинално: Писмото беше испратено од мене.\n"
-                "Со „Активен глас“: Јас го испратив писмото.\n"
-            )
-
-            user_message = (
-                f"{definitions_text}\n"
-                f"Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор.\n\n"
-                f"Искористи ја оваа особина {target_feature} ВРЗ песната.\n"
-                f"Како одговор врати ја назад песната, но со применет {target_feature} врз нејзе. Оваа е клучно.\n"
-                f"Следуваат два примери:\n"
-                f"{example_1}"
-                f"{example_2}"
-                f"Пасус:\n{song}\n\nОбработена песна:"
-            )
-               
-            new_system={"role": "system","content": 
-                ("[INST]Разговор помеѓу корисник и разговорник  за применување на  стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>.")}
-            
-            messages = [new_system,{"role": "user", "content": user_message}]
-
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": 0.2,
-                "repetition_penalty": 2.0,
-                "frequency_penalty": 0.2,
-                "presence_penalty": 0.15,
-                "top_p": 0.9,
-                "max_tokens":max_words,
-                'stop':'<|im_end|>"'}
-            start=time.time()   
-            resp = requests.post("http://127.0.0.1:8080/v1/chat/completions",
-            headers={"Content-Type": "application/json"},
-            json=payload) 
-            print(f'Time needed {time.time()-start}') 
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
         
+        
+        if not target_features:
+            return song
+        print(target_features)
+        definitions_text = "Дефиниции на особини:\n" + "\n".join(
+            [f"{i+1}. {target_features[i]} – {target_feature_definitions[i]}" for i in range(len(target_features))]
+        )
+        
+        example_1 = (
+            "Особина: Сарказам\n"
+            "Оригинално: Денес работев цел ден без пауза.\n"
+            "Со „Сарказам“: О, прекрасно, токму тоа ми требаше — уште еден ден без одмор!\n"
+        )
+        example_2 = (
+            "Особина: Активен глас\n"
+            "Оригинално: Писмото беше испратено од мене.\n"
+            "Со „Активен глас“: Јас го испратив писмото.\n"
+        )
+        
+       
+        styles_list = ", ".join(target_features)
+        user_message = (
+            f"{definitions_text}\n"
+            f"Овие се  дефинициите на стиловите, не ги давај нив во твојот одговор.\n\n"
+            f"Искористи ги сите овие особини: {styles_list} ВРЗ песната истовремено.\n"
+            f"Како одговор врати ја назад песната, но со применети {styles_list} врз нејзе. Оваа е клучно.\n"
+            f"Следуваат два примери:\n"
+            f'{example_1}\n'
+            f'{example_2}\n'
+            f"Пасус:\n{song}\n\nОбработена песна со применети стилови:"
+        )
+        
+        new_system = {
+            "role": "system",
+            "content": "[INST]Разговор помеѓу корисник и разговорник за применување на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>"
+        }
+        messages = [new_system, {"role": "user", "content": user_message}]
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.5,
+            "top_p": 0.9,
+            "stop": ["\n\n\n","<|im_end|>"],
+            "max_tokens":int(1.5*max_words),
+  
+        }
+        
+        start = time.time()
+        resp = requests.post(
+            "http://127.0.0.1:8080/v1/chat/completions",
+            headers={"Content-Type": "application/json"},
+            json=payload
+        )
+        print(f'Time needed for applying all styles: {time.time() - start}')
+        
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
     def transfer_style(self,sf_author,sf_song_title,st_author,st_song_text,st_song_title): 
         #self,sf_author,sf_song_title):
-        selected=self.get_present_styles_for_song(sf_song_title,sf_author)
-        print(selected)
-        return self.apply_styles_all_at_once(styles=selected,st_song_text=st_song_text)
+        sf_selected=self.get_present_styles_for_song(sf_song_title,sf_author)
+        st_selected=self.get_present_styles_for_song(st_song_title,st_author)
+        print(len(sf_selected))
+        print(len(st_selected))
+        return self.apply_styles_iterative(sf_styles=sf_selected,st_song_text=st_song_text,st_styles=st_selected)
     def extract_style_from_all_songs(self, songs_csv, output_filename="extracted_styles_1.csv", save_every=20):    
         if not os.path.exists(songs_csv):
             raise FileNotFoundError(f"CSV file not found: {songs_csv}")
@@ -421,5 +431,29 @@ class StyleTransferLocal:
         print(f"\n🏁 Extraction complete. Total time: {total_time:.2f}s")  
             
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.extract_style_from_all_songs("classification/cleaned_songs.csv",'vezilka_test.cvs')
+#st.extract_style_from_all_songs("classification/cleaned_songs.csv",'vezilka_test.cvs')
+molitva_teskts="""Молитва – Гане Тодоровски
 
+(пред крајот на годината
+и пред истекот на векот)
+
+Боже, зарем ќе оставиш да бидам неразбран
+Од современиците мои – што ги мунѕосував ко џган!
+Зарем ќе оставиш да останам во уплав збран
+И да си заминам од веков – од мунѕосаните мунѕосан?
+Придај им на моите сотатковинци додатен ум,
+За да ме доразберат, и да ме следат молчешкум;
+Не ги прекорувај престрого, не кревај ненужен шум,
+Поучи ги, кога зборувам, да стојат отпростум!
+
+За да се знае, конечно еднаш, КОЈ е КОЈ?
+За да не понесам вина, дека, дури бев жив
+Малцина надзборев а трижтолкумина не победив!
+
+Господе, дај искористи го авторитетот свој,
+Па, додека е време, застани на моја страна,
+За да поверувам дека ѝ бев на вистината бранач!
+
+Москва, декември 1994 г."""
+st_song_title='Молитва'
+print(st.transfer_style('Петре М. Андреевски','Наопачно оро','Гане Тодоровски',molitva_teskts,st_song_title))
