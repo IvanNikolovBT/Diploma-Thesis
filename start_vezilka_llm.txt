@@ -1,0 +1,5 @@
+./build/bin/llama-server \
+  --model /home/ivan/Desktop/Diplomska/VezilkaLLM.i1-Q6_K.gguf \
+  --port 8080 \
+  --n-gpu-layers 999 \
+  --ctx-size 2048
