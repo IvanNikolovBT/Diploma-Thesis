@@ -57,6 +57,9 @@ token.txt
 vector_db/chroma.sqlite3
 vector_db
 
+VezilkaLLM.i1-Q6_K.gguf
 all-MiniLM-L6-v2.F16.gguf
 optuna_studies.db
 RAG_builder/mk_core_news_sm-3.8.0-py3-none-any
+#aws
+aws
