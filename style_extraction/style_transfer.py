@@ -152,6 +152,76 @@ class StyleTransferLocal:
             (self.df['extracted_text'].str.match(pattern, na=False))
         ]
     def apply_styles_iterative(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
+        if log_path is None:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_path = f"song_style_log_{st_song_title or 'song'}_{ts}.txt"
+            log_path = "".join(c for c in log_path if c.isalnum() or c in (' ','.','_','-')).rstrip()
+
+        log_dir = os.path.dirname(log_path)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
+        new_song=st_song_text
+        list1=sf_styles['style_feature_category'].unique().tolist()
+        list2=st_styles['style_feature_category'].unique().tolist()
+        diff = [item for item in list1 if item not in list2]
+        print(diff)
+        print(st_song_text)
+        cumulative=0
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            i=0
+            for style in diff:
+                target_dif=self.styles[style]
+                user_message = (
+                        f"{target_dif}\n Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор\n\n"
+                        f"Искористи ја оваа особина {style} ВРЗ песната: .\n"
+                        f"Следувват два примери:\n"
+                        f"Пасус:\n{new_song}\n\n Обработена песна: <Генерирај ја песната тука ве замолувам>"
+                    )
+                new_system={"role": "system","content": 
+                    ("[INST]Разговор помеѓу корисник и разговорник  за применување на  стил македонска поезија. Асистентот дава песна со применет стил по барање на корисникот.[/INST]</s>.")}
+                    
+                messages = [new_system, {"role": "user", "content": user_message}]
+
+                payload = {
+                        "model": self.model,
+                        "messages": messages,
+                        "top_p": 0.9,
+                        'early_stopping':True,
+                        "frequency_penalty": 0.2,
+                        "presence_penalty": 0.15,
+                        'stop': ["<|im_end|>"],
+                        "max_tokens":int(1.5*len(st_song_text)),
+                    }
+                start_time=time.time()
+                resp = requests.post(
+                            "http://127.0.0.1:8080/v1/chat/completions",
+                            headers={"Content-Type": "application/json"},
+                            json=payload,
+                            timeout=200
+                        )
+                duration = time.time() - start_time
+                cumulative += duration
+                data = resp.json()
+                new_song = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                print("\n" + "="*40)
+                print(f"Iteration {i+1}/{len(diff)} - style added: {target_dif}")
+                print(f"Duration: {duration:.3f} s")
+                print("-" * 40)
+                print(new_song)
+                print("="*40 + "\n")
+                i+=1
+                log_file.write(f"--- Iteration {i+1} / {len(diff)} ---\n")
+                log_file.write(f"Style added: {target_dif}\n")
+                log_file.write(f"Author: {st_author}\n")
+                log_file.write(f"Song title: {st_song_title}\n")
+                log_file.write(f"Duration (s): {duration:.3f}\n")
+                log_file.write(f"Cumulative duration (s): {cumulative:.3f}\n")
+                log_file.write("Resulting song:\n")
+                log_file.write(new_song + "\n\n")
+                log_file.flush()
+            
+    def apply_styles_iterative_(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
     
         song = st_song_text
 
@@ -167,17 +237,27 @@ class StyleTransferLocal:
 
         cumulative = 0.0
         total_styles = len(sf_styles)
-
+        target_features = []
+        target_feature_definitions = []
+        for _, row in sf_styles.iterrows():
+            target_feature = row['style_feature_category']
+            if target_feature not in st_styles['style_feature_category'].values:
+                target_features.append(target_feature)
+                target_feature_definitions.append(self.styles[target_feature])
+            
+        
+        if not target_features:
+            return song
+        i=0
         with open(log_path, "a", encoding="utf-8") as log_file:
-            for i, (_, row) in enumerate(sf_styles.iterrows()):
-                target_feature = row['style_feature_category']
-                target_feature_definition = self.styles.get(target_feature, "")
+            for target_feature,target_definition in zip(target_features,target_feature_definitions):
+                
                 
                 example_1="Особина:Сарказам\nОригинално: Денес работев цел ден без пауза.\nСо „Сарказам“: О, прекрасно, токму тоа ми требаше — уште еден ден без одмор!\n"
                 example_2="Особина:Активен глас\nОригинално: Писмото беше испратено од мене.\nСо „Активен глас“: Јас го испратив писмото\n"
                 
                 user_message = (
-                    f"{target_feature_definition}\n Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор\n\n"
+                    f"{target_definition}\n Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор\n\n"
                     f"Искористи ја оваа особина {target_feature} ВРЗ песната: .\n"
                     f"Како одговор врати ја назад песната, но со применет {target_feature} врз нејзе. Оваа е клучно.\n"
                     f"Следувват два примери:\n"
@@ -199,14 +279,12 @@ class StyleTransferLocal:
                 payload = {
                     "model": self.model,
                     "messages": messages,
-                    "temperature": 0.2,
                     "top_p": 0.9,
-                    "repetition_penalty": 2,
                     'early_stopping':True,
                     "frequency_penalty": 0.2,
                     "presence_penalty": 0.15,
                     'stop': ["<|im_end|>"],
-                    "max_tokens":len(song),
+                    "max_tokens":int(1.5*len(song)),
                 }
                 """"output_ids = self.model.generate(input_ids=data_x_input_ids,
                                                  attention_mask=data_x_attention_mask,
@@ -259,7 +337,7 @@ class StyleTransferLocal:
                 print("-" * 40)
                 print(song)
                 print("="*40 + "\n")
-
+                i+=1
                 log_file.write(f"--- Iteration {i+1} / {total_styles} ---\n")
                 log_file.write(f"Style added: {target_feature}\n")
                 log_file.write(f"Author: {st_author}\n")
@@ -348,10 +426,8 @@ class StyleTransferLocal:
         #self,sf_author,sf_song_title):
         sf_selected=self.get_present_styles_for_song(sf_song_title,sf_author)
         st_selected=self.get_present_styles_for_song(st_song_title,st_author)
-        print(len(sf_selected))
-        print(len(st_selected))
-        return self.apply_styles_iterative(sf_styles=sf_selected,st_song_text=st_song_text,st_styles=st_selected)
-    def extract_style_from_all_songs(self, songs_csv, output_filename="extracted_styles_1.csv", save_every=20):    
+        return self.apply_styles_iterative(sf_styles=sf_selected,st_song_text=st_song_text,st_styles=st_selected,st_song_title=st_song_title,st_author=st_author)
+    def extract_style_from_all_songs(self, songs_csv, output_filename="extracted_styles_1.csv", save_every=100):    
         if not os.path.exists(songs_csv):
             raise FileNotFoundError(f"CSV file not found: {songs_csv}")
         sample_songs = pd.read_csv(songs_csv)
