@@ -1,10 +1,15 @@
 import boto3
 import json
+import boto3
+import json
+
+
 
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name='eu-central-1')
-
-body = json.dumps({
+profiles = bedrock_runtime.list_inference_profiles()
+print(json.dumps(profiles, indent=2))
+"""body = json.dumps({
     "messages": [
         {
             "role": "user",
@@ -36,7 +41,7 @@ try:
     print(f"Output tokens: {output_tokens}")
 
 except Exception as e:
-    print(f"Error: {e}")
+    print(f"Error: {e}")"""
     
     
 #input 4339

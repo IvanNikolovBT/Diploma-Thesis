@@ -23,6 +23,7 @@ class StyleTransferLocal:
         self.styles_path='style_extraction/vezilka_test.cvs'
         self.model=model
         self.styles=self.load_styles()
+        self.client = boto3.client("bedrock-runtime",region_name="eu-central-1",)
     
     def load_styles(self):
         abs_path = os.path.abspath('style_extraction/styles.json')
@@ -99,7 +100,34 @@ class StyleTransferLocal:
         
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
+    def invoke_nova_micro(self, prompt, system):
+        response = self.client.converse(
+            modelId="arn:aws:bedrock:eu-central-1::inference-profile/eu.amazon.nova-micro-v1:0",  # Predefined profile ARN
+            messages=[
+                {
+                    "role": "user",
+                    "content": [{"text": prompt}]
+                }
+            ],
+            system=[{"text": system}],
+            inferenceConfig={
+                "maxTokens": 1786,
+                "temperature": 0.5,
+                "topP": 0.9
+            }
+        )
+        return response['output']['message']['content'][0]['text']
         
+        
+    def extract_styles_using_api(self,song,without_def=True):
+        system="Ти си разговорник за екстракција на стил на македонска поезија."
+        if without_def:
+            prompt=self.create_full_prompt_without_definition(song)
+        else:
+            prompt=self.create_full_prompt_with_definition(song)
+        result=self.invoke_nova_micro(prompt,system)
+        print(result)
+        print(type(result))
     def extract_style_from_songs(self, sample_songs=[], output_dir=''):
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -220,7 +248,35 @@ class StyleTransferLocal:
                 log_file.write("Resulting song:\n")
                 log_file.write(new_song + "\n\n")
                 log_file.flush()
-            
+    def create_full_prompt_without_definition(self,song: str) -> str:
+
+        features_text = "\n".join(
+            [f"{feature}" for feature,definition in self.styles.items()]
+        )
+        
+        prompt = (
+            "Листа на различни стилски и лингвистички особини:\n\n"
+            f"{features_text}\n\n"
+            "Проучи го следниот пасус и за секоја од овие особини одговори со 'Да' или 'Не' дали авторот ја користи.\n\n"
+            f"Пасус:\n{song}\n\n"
+            "Одговор (форматирај по ред: 'Фигуративен јазик: Да', 'Сарказам: Не', ...):"
+        )
+        
+        return prompt   
+    def create_full_prompt_with_definition(self,song: str) -> str:
+       
+        features_text = "\n".join(
+            [f"{feature}" for feature,_ in self.styles.items()]
+        )
+        prompt = (
+            "Листа на различни стилски и лингвистички особини:\n\n"
+            f"{features_text}\n\n"
+            "Проучи го следниот пасус и за секоја од овие особини одговори со 'Да' или 'Не' дали авторот ја користи.\n\n"
+            f"Пасус:\n{song}\n\n"
+            "Одговор (форматирај по ред: 'Фигуративен јазик: Да', 'Сарказам: Не', ...):"
+        )
+        
+        return prompt      
     def apply_styles_iterative_(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
     
         song = st_song_text
@@ -532,4 +588,5 @@ molitva_teskts="""Молитва – Гане Тодоровски
 
 Москва, декември 1994 г."""
 st_song_title='Молитва'
-print(st.transfer_style('Петре М. Андреевски','Наопачно оро','Гане Тодоровски',molitva_teskts,st_song_title))
+#print(st.transfer_style('Петре М. Андреевски','Наопачно оро','Гане Тодоровски',molitva_teskts,st_song_title))
+st.extract_styles_using_api(song=molitva_teskts)
