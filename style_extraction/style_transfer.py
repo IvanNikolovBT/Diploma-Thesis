@@ -102,7 +102,7 @@ class StyleTransferLocal:
         return data["choices"][0]["message"]["content"].strip()
     def invoke_nova_micro(self, prompt, system):
         response = self.client.converse(
-            modelId="arn:aws:bedrock:eu-central-1::inference-profile/eu.amazon.nova-micro-v1:0",  # Predefined profile ARN
+            modelId="arn:aws:bedrock:eu-central-1::inference-profile/eu.amazon.nova-micro-v1:0", 
             messages=[
                 {
                     "role": "user",
@@ -116,18 +116,77 @@ class StyleTransferLocal:
                 "topP": 0.9
             }
         )
-        return response['output']['message']['content'][0]['text']
+        return response
         
+    def write_to_csv(self,author:str,song_title:str,result:json,output_path='api_styles_all_in_one_text.csv'):
         
-    def extract_styles_using_api(self,song,without_def=True):
+        text=result['output']['message']['content'][0]['text'] 
+        
+        stop_reason=result['stopReason']           
+        
+        input_tokens=result['usage']['inputTokens']
+        output_tokens=result['usage']['outputTokens']
+        total_tokens=result['usage']['totalTokens']
+        
+        ms=result['metrics']['latencyMs']
+        
+        row={'author':author,
+             'song_title':song_title,
+             'extracted_styles':text,
+             'input_tokens':input_tokens,
+             'output_tokens':output_tokens,
+             'total_tokens':total_tokens,
+             'ms':ms
+             }
+        api_csv = pd.DataFrame([row])
+        file_exists = os.path.isfile(output_path)
+        api_csv.to_csv(output_path, mode="a", index=False, header=not file_exists, encoding="utf-8")
+        
+    def extract_styles_from_song_using_api(self,song,author,song_title,output_path,without_def=True):
         system="Ти си разговорник за екстракција на стил на македонска поезија."
         if without_def:
             prompt=self.create_full_prompt_without_definition(song)
         else:
             prompt=self.create_full_prompt_with_definition(song)
         result=self.invoke_nova_micro(prompt,system)
-        print(result)
-        print(type(result))
+        self.write_to_csv(author,song_title,result,output_path)
+    def extract_all_styles_api(self):
+        output_path = 'api_styles_all_in_one_text.csv'
+
+        if os.path.exists(output_path):
+            result_df = pd.read_csv(output_path)
+            print(f"Loaded existing CSV with {len(result_df)} rows.")
+        else:
+            cols = ['author', 'song_title', 'extracted_styles',
+                    'input_tokens', 'output_tokens', 'total_tokens', 'ms']
+            result_df = pd.DataFrame(columns=cols)
+            result_df.to_csv(output_path, index=False)
+            print("Created new CSV file.")
+
+        i=0
+        n=len(self.df)
+        for _, song_row in self.df.iterrows():
+            author = song_row['author']
+            song_title = song_row['song_title']
+            song=song_row['song_text']
+            exists = (
+                (result_df['author'] == author) &
+                (result_df['song_title'] == song_title)
+            ).any()
+
+            if exists:
+                print(f"Skipping {author} - {song_title} (already processed).")
+                continue
+
+            print(f"Processing {author} - {song_title}... {i}/{n} {i/n}")
+            
+            
+            self.extract_styles_from_song_using_api(song=song,author=author,
+                                                             song_title=song_title,output_path=output_path)
+
+
+        print("✅ All songs processed.")
+        
     def extract_style_from_songs(self, sample_songs=[], output_dir=''):
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -563,30 +622,5 @@ class StyleTransferLocal:
         print(f"\n🏁 Extraction complete. Total time: {total_time:.2f}s")  
             
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-#st.extract_style_from_all_songs("classification/cleaned_songs.csv",'vezilka_test.cvs')
-molitva_teskts="""Молитва – Гане Тодоровски
+st.extract_all_styles_api()
 
-(пред крајот на годината
-и пред истекот на векот)
-
-Боже, зарем ќе оставиш да бидам неразбран
-Од современиците мои – што ги мунѕосував ко џган!
-Зарем ќе оставиш да останам во уплав збран
-И да си заминам од веков – од мунѕосаните мунѕосан?
-Придај им на моите сотатковинци додатен ум,
-За да ме доразберат, и да ме следат молчешкум;
-Не ги прекорувај престрого, не кревај ненужен шум,
-Поучи ги, кога зборувам, да стојат отпростум!
-
-За да се знае, конечно еднаш, КОЈ е КОЈ?
-За да не понесам вина, дека, дури бев жив
-Малцина надзборев а трижтолкумина не победив!
-
-Господе, дај искористи го авторитетот свој,
-Па, додека е време, застани на моја страна,
-За да поверувам дека ѝ бев на вистината бранач!
-
-Москва, декември 1994 г."""
-st_song_title='Молитва'
-#print(st.transfer_style('Петре М. Андреевски','Наопачно оро','Гане Тодоровски',molitva_teskts,st_song_title))
-st.extract_styles_using_api(song=molitva_teskts)
