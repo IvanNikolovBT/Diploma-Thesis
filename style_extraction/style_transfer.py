@@ -37,6 +37,13 @@ class StyleTransferLocal:
             n=min(number_of_songs, len(author_songs)),
             random_state=None  
         )
+    def extract_n_random_styles_for_author(self, author_name='Блаже Конески', number_of_songs=10):
+        styles=pd.read_csv('api_styles_all_in_one_text.csv')
+        author_songs = styles[styles['author'] == author_name]
+        return author_songs.sample(
+            n=min(number_of_songs, len(author_songs)),
+            random_state=None  
+        )
     def extract_all_songs_for_author(self, author_name='Блаже Конески'):
         return self.df[self.df['author'] == author_name]
     
@@ -620,7 +627,54 @@ class StyleTransferLocal:
 
         pbar.close()
         print(f"\n🏁 Extraction complete. Total time: {total_time:.2f}s")  
-            
+    def create_csv_for_extraction(self,
+                                number_of_songs=10,
+                                styles_path='api_styles_all_in_one_text.csv',
+                                results_path='author_songs_created_only_with_styles.csv'):
+        
+        extracted_styles = pd.read_csv(styles_path)
+        unique_authors = extracted_styles['author'].unique()
+
+        columns = [
+            'author',
+            'name_of_sample_song',
+            'styles',
+            'name_of_new_song',
+            'song',
+            'input',
+            'output',
+            'total',
+            'ms'
+        ]
+
+        if not os.path.exists(results_path):
+            result_df = pd.DataFrame(columns=columns)
+            result_df.to_csv(results_path, index=False)
+
+        existing_df = pd.read_csv(results_path)
+
+        new_rows = []
+        for author in unique_authors:
+            songs_for_author = self.extract_n_random_styles_for_author(author, number_of_songs)
+
+            for _, song_info in songs_for_author.iterrows():
+                row = {
+                    'author': song_info['author'],
+                    'name_of_sample_song': song_info['song_title'],
+                    'styles': song_info['extracted_styles'],
+                    'name_of_new_song': '',
+                    'song': '',
+                    'input': '',
+                    'output': '',
+                    'total': '',
+                    'ms': ''
+                }
+                new_rows.append(row)
+
+        updated_df = pd.concat([existing_df, pd.DataFrame(new_rows)], ignore_index=True)
+
+        updated_df.to_csv(results_path, index=False)
+        print(f"✅ CSV updated/created at: {results_path}")                
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.extract_all_styles_api()
+st.create_csv_for_extraction()
 
