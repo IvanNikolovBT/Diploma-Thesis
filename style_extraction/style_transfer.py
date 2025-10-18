@@ -684,24 +684,26 @@ class StyleTransferLocal:
             all_keys.update(keys)
 
         sorted_keys = sorted(all_keys)
-
+        styles_string="".join(f"- {key}" for key in sorted_keys)
         prompt = "Стилски фигури што треба да се искористат:\n"
         prompt += "\n".join(f"- {key}" for key in sorted_keys)
-        prompt+="\nИзгенерирај македонска поезија користејќи ги горе наведените стилски фигури.  Песната мора да има наслов. Насловот запиши го во следниот формат <НАСЛОВ>Тука вметни го насловот </НАСЛОВ>"
-        return prompt
+        prompt+="\nИзгенерирај македонска поезија користејќи ги горе наведените насоки на значење.  Песната мора да има наслов. Насловот запиши го во следниот формат "
+        prompt+="<НАСЛОВ>Тука вметни го насловот </НАСЛОВ> . Песната генерирај ја во раммките на <ПЕСНА>Тука вметни ја песната </ПЕСНА>."
+        prompt+="Не ги користи имињата на самите насоки на значење.Биди креативен!"
+        return prompt,styles_string
     def fill_csv_using_only_styles(self):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
         
         start_time = time.time()
-        
+        total_time=0
         total_songs = len(songs_to_apply)
         
         for idx, row in songs_to_apply.iterrows():
             try:
                 extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
                 styles_to_apply = extracted_styles.keys()
-                prompt = self.only_styles_prompt(styles_to_apply)
+                prompt,styles_string = self.only_styles_prompt(styles_to_apply)
                 
                 result = self.invoke_nova_micro(prompt=prompt, system=system)
                 
@@ -713,12 +715,13 @@ class StyleTransferLocal:
                 self.write_to_csv_only_styles(
                     row['author'],
                     row['name_of_sample_song'],
-                    row['styles'],
+                    styles_string,
                     result
                 )
                 
                 elapsed = time.time() - start_time
-                print(f"[{idx+1}/{total_songs}] Processed '{row['name_of_sample_song']}' by '{row['author']}' - Time elapsed: {elapsed:.2f}s")
+                total_time+=elapsed
+                print(f"[{idx+1}/{total_songs}] Processed '{row['name_of_sample_song']}' by '{row['author']}' - Time elapsed: {elapsed:.2f}s-Total {total_time:.2f}")
             
             except Exception as e:
                 print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
@@ -732,17 +735,15 @@ class StyleTransferLocal:
 
         ms = result['metrics']['latencyMs']
 
-        # Extract title from <НАСЛОВ> tags
-        match = re.search(r'<НАСЛОВ>\s*(.*?)\s*</НАСЛОВ>', text, re.DOTALL)
-        if match:
-            name_of_new_song = match.group(1).strip()
-            # Remove the tags from the text
-            text = re.sub(r'<НАСЛОВ>\s*.*?\s*</НАСЛОВ>', '', text, flags=re.DOTALL)
-        else:
-            name_of_new_song = 'no_title_found'
+        
+        title_match = re.search(r'<НАСЛОВ>\s*(.*?)\s*</НАСЛОВ>', text, re.DOTALL)
+        name_of_new_song = title_match.group(1).strip() if title_match else 'no_title_found'
 
-        # Prepend the title at the beginning of the text
-        text = f"{name_of_new_song}\n\n{text.strip()}"
+        
+        song_match = re.search(r'<ПЕСНА>\s*(.*?)\s*</ПЕСНА>', text, re.DOTALL)
+        
+        song_content = song_match.group(1).strip() if song_match else 'no_song_found'
+        text = f"{name_of_new_song}\n\n{song_content.strip()}"
 
         row = {
             'author': author,
