@@ -11,6 +11,8 @@ import datetime
 import boto3
 import json
 import re
+from collections import Counter
+from sklearn.feature_extraction.text import TfidfVectorizer
 class StyleTransferLocal:
     
     def __init__(self,model="trajkovnikola/MKLLM-7B-Instruct"):
@@ -677,7 +679,7 @@ class StyleTransferLocal:
         updated_df.to_csv(results_path, index=False)
         print(f"✅ CSV updated/created at: {results_path}")  
     
-    def only_styles_prompt(self,*key_lists):
+    def create_only_styles_prompt(self,*key_lists):
   
         all_keys = set()
         for keys in key_lists:
@@ -691,6 +693,37 @@ class StyleTransferLocal:
         prompt+="<НАСЛОВ>Тука вметни го насловот </НАСЛОВ> . Песната генерирај ја во раммките на <ПЕСНА>Тука вметни ја песната </ПЕСНА>."
         prompt+="Не ги користи имињата на самите насоки на значење.Биди креативен!"
         return prompt,styles_string
+    
+    def create_idf_styles_prompt(self, author, all_author_words, num_words=10, styles=None):
+        if styles is None:
+            styles = []
+
+        # Ensure styles are strings
+        styles = [s.strip() for s in styles if isinstance(s, str) and s.strip()]
+
+        # Get top words for this author
+        most_common_words = all_author_words['expressive_words'][author]
+        top_words = [word for word, _ in most_common_words[:num_words]]
+
+        # Build readable strings
+        styles_string = "\n".join(f"- {key}" for key in styles)
+        words_string = ", ".join(top_words)
+
+        # Construct the prompt
+        prompt = "Стилски фигури што треба да се искористат:\n"
+        prompt += styles_string if styles_string else "- (нема избрани стилови)"
+        prompt += "\n\nНајчести зборови кои треба да се искористат во песната:\n"
+        prompt += words_string
+        prompt += (
+            "\n\nИзгенерирај македонска поезија користејќи ги горенаведените стилски фигури и зборови. "
+            "Песната мора да има наслов. Насловот запиши го во следниот формат: "
+            "<НАСЛОВ>Тука вметни го насловот</НАСЛОВ>. "
+            "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
+            "Не ги користи имињата на самите насоки на значење. Биди креативен!"
+        )
+
+        return prompt, "\n".join(styles)
+
     def fill_csv_using_only_styles(self):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
@@ -703,7 +736,7 @@ class StyleTransferLocal:
             try:
                 extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
                 styles_to_apply = extracted_styles.keys()
-                prompt,styles_string = self.only_styles_prompt(styles_to_apply)
+                prompt,styles_string = self.create_only_styles_prompt(styles_to_apply)
                 
                 result = self.invoke_nova_micro(prompt=prompt, system=system)
                 
@@ -717,6 +750,46 @@ class StyleTransferLocal:
                     row['name_of_sample_song'],
                     styles_string,
                     result
+                )
+                
+                elapsed = time.time() - start_time
+                total_time+=elapsed
+                print(f"[{idx+1}/{total_songs}] Processed '{row['name_of_sample_song']}' by '{row['author']}' - Time elapsed: {elapsed:.2f}s-Total {total_time:.2f}")
+            
+            except Exception as e:
+                print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
+   
+    def fill_csv_using__styles_idf(self):
+        system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
+        songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
+        
+        start_time = time.time()
+        total_time=0
+        total_songs = len(songs_to_apply)
+        all_author_words=self.analyze_author_text()
+        for idx, row in songs_to_apply.iterrows():
+            try:
+                extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
+                styles_to_apply = list(extracted_styles.keys())
+                prompt, styles_string = self.create_idf_styles_prompt(
+                    author=row['author'],
+                    all_author_words=all_author_words,
+                    styles=styles_to_apply
+                )
+                
+                result = self.invoke_nova_micro(prompt=prompt, system=system)
+                
+               
+                if not result or 'output' not in result or 'message' not in result['output']:
+                    print(f"[{idx+1}/{total_songs}] Warning: No valid reply from API for song '{row['name_of_sample_song']}' by '{row['author']}'")
+                    continue
+                
+                self.write_to_csv_only_styles(
+                    row['author'],
+                    row['name_of_sample_song'],
+                    styles_string,
+                    result,
+                    output_path='author_songs_created_using_styles_idf.csv'
                 )
                 
                 elapsed = time.time() - start_time
@@ -778,6 +851,69 @@ class StyleTransferLocal:
 
         return result
 
-st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.fill_csv_using_only_styles()
 
+    def analyze_author_text(self,min_df=3, max_df=0.8904674508605334,max_features=4619, n_top_words=10,ngram_range=(1,1), stop_words=None):
+       
+        df = self.df.copy()
+        df['song_text_processed'] = df['song_text'].str.lower().str.replace(r'[^\w\s]', '', regex=True)
+        
+        author_corpus = df.groupby("author")["song_text_processed"].apply(lambda x: " ".join(x)).reset_index()
+        
+        results = {'common_words': {}, 'expressive_words': {}}
+        
+        for author in author_corpus['author']:
+            texts = df[df['author'] == author]['song_text_processed']
+            all_words = ' '.join(texts).split()
+            
+            author_names = author.lower().split()
+            author_first_name = author_names[0] if len(author_names) > 0 else ''
+            author_last_name = author_names[-1] if len(author_names) > 1 else ''
+            
+            if stop_words:
+                all_words = [word for word in all_words if word not in stop_words]
+            all_words = [word for word in all_words if word not in [author_first_name, author_last_name]]
+            
+            word_counts = Counter(all_words)
+            common_words = [(word, count) for word, count in word_counts.most_common(n_top_words)]
+            results['common_words'][author] = common_words
+        
+        vectorizer = TfidfVectorizer(
+            min_df=min_df,
+            max_df=max_df,
+            stop_words=stop_words,
+            ngram_range=ngram_range
+        )
+        X = vectorizer.fit_transform(author_corpus["song_text_processed"])
+        feature_names = vectorizer.get_feature_names_out()
+        
+        for idx, author in enumerate(author_corpus["author"]):
+            author_names = author.lower().split()
+            author_first_name = author_names[0] if len(author_names) > 0 else ''
+            author_last_name = author_names[-1] if len(author_names) > 1 else ''
+            
+            tfidf_vector = X[idx].toarray()[0]
+            top_indices = tfidf_vector.argsort()[-n_top_words*2:][::-1]
+            top_terms = [(feature_names[i], tfidf_vector[i]) for i in top_indices 
+                        if feature_names[i] not in [author_first_name, author_last_name]]
+            top_terms = top_terms[:n_top_words]
+            results['expressive_words'][author] = top_terms
+        
+        """print("Most Common Words per Author (Raw Frequency):")
+        for author, words in results['common_words'].items():
+            print(f"\n{author}:")
+            for word, count in words:
+                print(f"  {word}: {count}")
+        
+        print("\nMost Expressive Words per Author (TF-IDF Scores):")
+        for author, words in results['expressive_words'].items():
+            print(f"\n{author}:")
+            for word, score in words:
+                print(f"  {word}: {score:.3f}")"""
+        
+        return results
+
+
+st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
+st.fill_csv_using__styles_idf()
+
+#Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
