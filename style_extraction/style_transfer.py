@@ -10,6 +10,7 @@ from tqdm import tqdm
 import datetime
 import boto3
 import json
+import re
 class StyleTransferLocal:
     
     def __init__(self,model="trajkovnikola/MKLLM-7B-Instruct"):
@@ -630,7 +631,7 @@ class StyleTransferLocal:
     def create_csv_for_extraction(self,
                                 number_of_songs=10,
                                 styles_path='api_styles_all_in_one_text.csv',
-                                results_path='author_songs_created_only_with_styles.csv'):
+                                results_path='author_songs_to_create_only_with_styles.csv'):
         
         extracted_styles = pd.read_csv(styles_path)
         unique_authors = extracted_styles['author'].unique()
@@ -656,7 +657,7 @@ class StyleTransferLocal:
         new_rows = []
         for author in unique_authors:
             songs_for_author = self.extract_n_random_styles_for_author(author, number_of_songs)
-
+            
             for _, song_info in songs_for_author.iterrows():
                 row = {
                     'author': song_info['author'],
@@ -674,7 +675,108 @@ class StyleTransferLocal:
         updated_df = pd.concat([existing_df, pd.DataFrame(new_rows)], ignore_index=True)
 
         updated_df.to_csv(results_path, index=False)
-        print(f"✅ CSV updated/created at: {results_path}")                
+        print(f"✅ CSV updated/created at: {results_path}")  
+    
+    def only_styles_prompt(self,*key_lists):
+  
+        all_keys = set()
+        for keys in key_lists:
+            all_keys.update(keys)
+
+        sorted_keys = sorted(all_keys)
+
+        prompt = "Стилски фигури што треба да се искористат:\n"
+        prompt += "\n".join(f"- {key}" for key in sorted_keys)
+        prompt+="\nИзгенерирај македонска поезија користејќи ги горе наведените стилски фигури.  Песната мора да има наслов. Насловот запиши го во следниот формат <НАСЛОВ>Тука вметни го насловот </НАСЛОВ>"
+        return prompt
+    def fill_csv_using_only_styles(self):
+        system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
+        songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
+        
+        start_time = time.time()
+        
+        total_songs = len(songs_to_apply)
+        
+        for idx, row in songs_to_apply.iterrows():
+            try:
+                extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
+                styles_to_apply = extracted_styles.keys()
+                prompt = self.only_styles_prompt(styles_to_apply)
+                
+                result = self.invoke_nova_micro(prompt=prompt, system=system)
+                
+               
+                if not result or 'output' not in result or 'message' not in result['output']:
+                    print(f"[{idx+1}/{total_songs}] Warning: No valid reply from API for song '{row['name_of_sample_song']}' by '{row['author']}'")
+                    continue
+                
+                self.write_to_csv_only_styles(
+                    row['author'],
+                    row['name_of_sample_song'],
+                    row['styles'],
+                    result
+                )
+                
+                elapsed = time.time() - start_time
+                print(f"[{idx+1}/{total_songs}] Processed '{row['name_of_sample_song']}' by '{row['author']}' - Time elapsed: {elapsed:.2f}s")
+            
+            except Exception as e:
+                print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
+
+    def write_to_csv_only_styles(self, author, song_title, styles_to_apply, result, output_path='author_songs_created_only_with_styles.csv'):
+        text = result['output']['message']['content'][0]['text']
+
+        input_tokens = result['usage']['inputTokens']
+        output_tokens = result['usage']['outputTokens']
+        total_tokens = result['usage']['totalTokens']
+
+        ms = result['metrics']['latencyMs']
+
+        # Extract title from <НАСЛОВ> tags
+        match = re.search(r'<НАСЛОВ>\s*(.*?)\s*</НАСЛОВ>', text, re.DOTALL)
+        if match:
+            name_of_new_song = match.group(1).strip()
+            # Remove the tags from the text
+            text = re.sub(r'<НАСЛОВ>\s*.*?\s*</НАСЛОВ>', '', text, flags=re.DOTALL)
+        else:
+            name_of_new_song = 'no_title_found'
+
+        # Prepend the title at the beginning of the text
+        text = f"{name_of_new_song}\n\n{text.strip()}"
+
+        row = {
+            'author': author,
+            'song_title': song_title,
+            'styles_to_apply': styles_to_apply,
+            'name_of_new_song': name_of_new_song,
+            'new_song': text,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'total_tokens': total_tokens,
+            'ms': ms
+        }
+
+        api_csv = pd.DataFrame([row])
+        file_exists = os.path.isfile(output_path)
+        api_csv.to_csv(output_path, mode="a", index=False, header=not file_exists, encoding="utf-8")
+    def extract_style_pairs(self, text, only_present=False):
+        pattern = r"([^:]+):\s*(.+)"
+        pairs = re.findall(pattern, text)
+
+        result = {}
+        for key, value in pairs:
+            key_clean = key.strip()
+            value_clean = value.strip().lower()
+
+            present_value = "Да" if value_clean == "да" else "Не"
+
+            if only_present and present_value != "Да":
+                continue
+
+            result[key_clean] = present_value
+
+        return result
+
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.create_csv_for_extraction()
+st.fill_csv_using_only_styles()
 
