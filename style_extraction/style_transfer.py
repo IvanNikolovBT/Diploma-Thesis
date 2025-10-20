@@ -2,6 +2,7 @@ import sys
 import os
 import pandas as pd
 import requests
+import random
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 from poetry_DB import PoetryDB
@@ -110,7 +111,25 @@ class StyleTransferLocal:
         
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
+    
     def invoke_nova_micro(self, prompt, system):
+        response = self.client.converse(
+            modelId="arn:aws:bedrock:eu-central-1::inference-profile/eu.amazon.nova-micro-v1:0", 
+            messages=[
+                {
+                    "role": "user",
+                    "content": [{"text": prompt}]
+                }
+            ],
+            system=[{"text": system}],
+            inferenceConfig={
+                "maxTokens": 1786,
+                "temperature": 0.5,
+                "topP": 0.9
+            }
+        )
+        return response
+    def invoke_other_model(self, prompt, system):
         response = self.client.converse(
             modelId="arn:aws:bedrock:eu-central-1::inference-profile/eu.amazon.nova-micro-v1:0", 
             messages=[
@@ -132,7 +151,7 @@ class StyleTransferLocal:
         
         text=result['output']['message']['content'][0]['text'] 
         
-        stop_reason=result['stopReason']           
+                 
         
         input_tokens=result['usage']['inputTokens']
         output_tokens=result['usage']['outputTokens']
@@ -262,8 +281,7 @@ class StyleTransferLocal:
         list1=sf_styles['style_feature_category'].unique().tolist()
         list2=st_styles['style_feature_category'].unique().tolist()
         diff = [item for item in list1 if item not in list2]
-        print(diff)
-        print(st_song_text)
+    
         cumulative=0
         with open(log_path, "a", encoding="utf-8") as log_file:
             i=0
@@ -698,18 +716,18 @@ class StyleTransferLocal:
         if styles is None:
             styles = []
 
-        # Ensure styles are strings
+        
         styles = [s.strip() for s in styles if isinstance(s, str) and s.strip()]
 
-        # Get top words for this author
+        
         most_common_words = all_author_words['expressive_words'][author]
         top_words = [word for word, _ in most_common_words[:num_words]]
 
-        # Build readable strings
+       
         styles_string = "\n".join(f"- {key}" for key in styles)
         words_string = ", ".join(top_words)
 
-        # Construct the prompt
+        
         prompt = "Стилски фигури што треба да се искористат:\n"
         prompt += styles_string if styles_string else "- (нема избрани стилови)"
         prompt += "\n\nНајчести зборови кои треба да се искористат во песната:\n"
@@ -759,7 +777,7 @@ class StyleTransferLocal:
             except Exception as e:
                 print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
    
-    def fill_csv_using__styles_idf(self):
+    def fill_csv_using__styles_idf(self,model='claude',output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
         
@@ -776,9 +794,11 @@ class StyleTransferLocal:
                     all_author_words=all_author_words,
                     styles=styles_to_apply
                 )
-                
-                result = self.invoke_nova_micro(prompt=prompt, system=system)
-                
+                start_time = time.time()
+                if model=='nova':
+                    result = self.invoke_nova_micro(prompt,system)
+                elif model=='claude':
+                    result=self.invoke_claude_model(prompt,system)
                
                 if not result or 'output' not in result or 'message' not in result['output']:
                     print(f"[{idx+1}/{total_songs}] Warning: No valid reply from API for song '{row['name_of_sample_song']}' by '{row['author']}'")
@@ -789,7 +809,7 @@ class StyleTransferLocal:
                     row['name_of_sample_song'],
                     styles_string,
                     result,
-                    output_path='author_songs_created_using_styles_idf.csv'
+                    output_path=output_path
                 )
                 
                 elapsed = time.time() - start_time
@@ -852,68 +872,142 @@ class StyleTransferLocal:
         return result
 
 
-    def analyze_author_text(self,min_df=3, max_df=0.8904674508605334,max_features=4619, n_top_words=10,ngram_range=(1,1), stop_words=None):
+    def analyze_author_text(
+    self,
+    min_df=3,
+    max_df=0.8904674508605334,
+    max_features=4619,
+    n_top_words=10,
+    ngram_range=(1, 1),
+    stop_words=None,
+    skip_stopwords=True
+):
        
+
         df = self.df.copy()
         df['song_text_processed'] = df['song_text'].str.lower().str.replace(r'[^\w\s]', '', regex=True)
-        
+
         author_corpus = df.groupby("author")["song_text_processed"].apply(lambda x: " ".join(x)).reset_index()
-        
+
         results = {'common_words': {}, 'expressive_words': {}}
-        
+
+        # Default stop words if not provided
+        default_stop_words = [
+            'ќе', 'би', 'ко', 'го', 'како', 'ги', 'ми', 'ти', 'те', 'му', 'само',
+            'зашто', 'таа', 'тие', 'нè', 'но', 'сè', 'со', 'по', 'ли', 'ој', 'ни',
+            'ниту', 'pinterest', 'до', 'таа', 'ние', 'вие', 'тие', 'си','то','сме',
+            'бил','јас','нека','кога','колку','тоа','дека','или','зар','ил','ме','со',
+            'кој','кон','та','оваа','овој','тој','кај','се','туку','ние','вие','тие','нѐ'
+        ]
+        if stop_words is None:
+            stop_words = default_stop_words
+
         for author in author_corpus['author']:
             texts = df[df['author'] == author]['song_text_processed']
             all_words = ' '.join(texts).split()
-            
+
+            # Remove author's own name
             author_names = author.lower().split()
             author_first_name = author_names[0] if len(author_names) > 0 else ''
             author_last_name = author_names[-1] if len(author_names) > 1 else ''
-            
-            if stop_words:
+
+            if skip_stopwords:
                 all_words = [word for word in all_words if word not in stop_words]
+
             all_words = [word for word in all_words if word not in [author_first_name, author_last_name]]
-            
+
             word_counts = Counter(all_words)
             common_words = [(word, count) for word, count in word_counts.most_common(n_top_words)]
             results['common_words'][author] = common_words
-        
+
+        # TF-IDF part
         vectorizer = TfidfVectorizer(
             min_df=min_df,
             max_df=max_df,
-            stop_words=stop_words,
-            ngram_range=ngram_range
+            stop_words=stop_words if skip_stopwords else None,
+            ngram_range=ngram_range,
+            max_features=max_features
         )
+
         X = vectorizer.fit_transform(author_corpus["song_text_processed"])
         feature_names = vectorizer.get_feature_names_out()
-        
+
         for idx, author in enumerate(author_corpus["author"]):
             author_names = author.lower().split()
             author_first_name = author_names[0] if len(author_names) > 0 else ''
             author_last_name = author_names[-1] if len(author_names) > 1 else ''
-            
+
             tfidf_vector = X[idx].toarray()[0]
-            top_indices = tfidf_vector.argsort()[-n_top_words*2:][::-1]
-            top_terms = [(feature_names[i], tfidf_vector[i]) for i in top_indices 
-                        if feature_names[i] not in [author_first_name, author_last_name]]
+            top_indices = tfidf_vector.argsort()[-n_top_words * 2:][::-1]
+            top_terms = [
+                (feature_names[i], tfidf_vector[i])
+                for i in top_indices
+                if feature_names[i] not in [author_first_name, author_last_name]
+            ]
             top_terms = top_terms[:n_top_words]
             results['expressive_words'][author] = top_terms
-        
-        """print("Most Common Words per Author (Raw Frequency):")
-        for author, words in results['common_words'].items():
-            print(f"\n{author}:")
-            for word, count in words:
-                print(f"  {word}: {count}")
-        
+
         print("\nMost Expressive Words per Author (TF-IDF Scores):")
         for author, words in results['expressive_words'].items():
             print(f"\n{author}:")
             for word, score in words:
-                print(f"  {word}: {score:.3f}")"""
-        
+                print(f"  {word}: {score:.3f}")
+
         return results
+    def print_random_prompt(self):
 
+        try:
+            songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
 
+            random_row = songs_to_apply.sample(1).iloc[0]
+            author = random_row['author']
+
+            all_author_words = self.analyze_author_text()
+
+            extracted_styles = self.extract_style_pairs(random_row['styles'], only_present=True)
+            available_styles = list(extracted_styles.keys())
+
+            if not available_styles:
+                print(f"No styles found for author '{author}', skipping.")
+                return
+
+            
+            # Create the final prompt
+            prompt, styles_string = self.create_idf_styles_prompt(
+                author=author,
+                all_author_words=all_author_words,
+                styles=available_styles
+            )
+
+            print("=== 🎭 Random Prompt Generated ===")
+            print(f"Author: {author}")
+            print("\n--- Prompt ---")
+            print(prompt)
+            print("-----------------------------")
+
+            return prompt 
+
+        except Exception as e:
+            print(f"Error generating random prompt: {e}")
+    def invoke_claude_model(self, prompt, system):
+        response = self.client.converse(
+            modelId="anthropic.claude-3-haiku-20240307-v1:0",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [{"text": prompt}]
+                }
+            ],
+            system=[{"text": system}],
+            inferenceConfig={
+                "maxTokens": 2000,
+                "temperature": 0.7,
+                "topP": 0.999
+            }
+        )
+        return response
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.fill_csv_using__styles_idf()
+st.fill_csv_using__styles_idf(output_path='author_songs_created_using_styles_idf_stop_words_removed_claude.csv')
+
 
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
