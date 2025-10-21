@@ -742,7 +742,40 @@ class StyleTransferLocal:
         )
 
         return prompt, "\n".join(styles)
+    
+    def create_idf_styles_example_prompt(self, author, all_author_words, example_song,num_words=10 ,styles=None):
+        if styles is None:
+            styles = []
 
+        
+        styles = [s.strip() for s in styles if isinstance(s, str) and s.strip()]
+
+        
+        most_common_words = all_author_words['expressive_words'][author]
+        top_words = [word for word, _ in most_common_words[:num_words]]
+
+       
+        styles_string = "\n".join(f"- {key}" for key in styles)
+        words_string = ", ".join(top_words)
+
+        
+        prompt = "Стилски фигури што треба да се искористат:\n"
+        prompt += styles_string if styles_string else "- (нема избрани стилови)"
+        prompt += "\n\nНајчести зборови кои треба да се искористат во песната:\n"
+        prompt += words_string
+        prompt += (
+            "\n\nИзгенерирај македонска поезија користејќи ги горенаведените стилски фигури и зборови. "
+            "Песната мора да има наслов. Насловот запиши го во следниот формат: "
+            "<НАСЛОВ>Тука вметни го насловот</НАСЛОВ>. "
+            "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
+            "Не ги користи имињата на самите насоки на значење. Биди креативен!"
+            "Пример песна од авторот"
+            
+        )
+        prompt+=example_song
+
+        return prompt, "\n".join(styles)
+    
     def fill_csv_using_only_styles(self):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
@@ -778,18 +811,48 @@ class StyleTransferLocal:
             except Exception as e:
                 print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
    
-    def fill_csv_using__styles_idf(self,styles_from='author_songs_to_create_only_with_styles.csv', model='claude', output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'):
+    def fill_csv_using__styles_idf(
+        self,
+        styles_from='author_songs_to_create_only_with_styles.csv',
+        model='claude',
+        output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'
+    ):
+        
+
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv(styles_from)
+
         
+        processed_songs = set()
+        if os.path.exists(output_path):
+            try:
+                existing = pd.read_csv(output_path)
+                if {'author', 'song_title'}.issubset(existing.columns):
+                    processed_songs = set(
+                        zip(existing['author'].astype(str), existing['song_title'].astype(str))
+                    )
+                    print(f"🔁 Found existing output file with {len(processed_songs)} processed songs. Resuming from last unprocessed one...")
+                else:
+                    print("⚠️ Output file found but missing expected columns. Starting from scratch.")
+            except Exception as e:
+                print(f"⚠️ Could not read existing output file: {e}")
+        else:
+            print("📄 No existing output file found. Starting fresh.")
+
         start_time = time.time()
         total_time = 0
         total_songs = len(songs_to_apply)
         all_author_words = self.analyze_author_text()
 
         for idx, row in songs_to_apply.iterrows():
-            song_title = row['name_of_sample_song']
-            author = row['author']
+            song_title = str(row['name_of_sample_song'])
+            author = str(row['author'])
+
+            # ✅ STEP 2: Skip if already processed
+            if (author, song_title) in processed_songs:
+                print(f"[{idx+1}/{total_songs}] ⏩ Skipping already processed '{song_title}' by '{author}'")
+                continue
+
             print(f"[{idx+1}/{total_songs}] Processing '{song_title}' by '{author}'")
 
             extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
@@ -816,7 +879,7 @@ class StyleTransferLocal:
                     if not result or 'output' not in result or 'message' not in result['output']:
                         raise ValueError("Invalid API response")
 
-                    #
+                    # ✅ Write to CSV immediately after success
                     self.write_to_csv_only_styles(
                         author, song_title, styles_string, result,
                         output_path=output_path
@@ -826,7 +889,6 @@ class StyleTransferLocal:
                     total_time += elapsed
                     print(f"[{idx+1}/{total_songs}] ✅ Processed '{song_title}' - {elapsed:.2f}s (Total {total_time:.2f}s)")
 
-                    
                     wait_time = random.uniform(5, 10)
                     print(f"Waiting {wait_time:.2f}s before next song...")
                     time.sleep(wait_time)
@@ -844,11 +906,132 @@ class StyleTransferLocal:
                     else:
                         wait_time = random.uniform(10, 20)
                         print(f"Retrying after {wait_time:.2f}s...")
-                    
-                    time.sleep(wait_time)   
+
+                    time.sleep(wait_time)
 
             if not success:
                 print(f"[{idx+1}/{total_songs}] ❌ Skipping '{song_title}' after {max_retries} failed attempts.")
+
+        # ✅ Final summary message
+        total_elapsed = time.time() - start_time
+        print("\n🏁 All songs processed!")
+        print(f"✅ Total songs in list: {total_songs}")
+        print(f"✅ Already processed (skipped): {len(processed_songs)}")
+        print(f"✅ Newly processed this run: {total_songs - len(processed_songs)}")
+        print(f"🕒 Total runtime: {total_elapsed/60:.2f} minutes\n")
+    
+    def fill_csv_using__styles_idf_example_song_to_emiluate(
+        self,
+        styles_from='all_styles_to_create.csv',
+        model='claude',
+        output_path='author_songs_created_using_styles_idf_stop_words_removed_example_song.csv'
+    ):
+        
+
+        system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
+        songs_to_apply = pd.read_csv(styles_from)
+
+        
+        processed_songs = set()
+        if os.path.exists(output_path):
+            try:
+                existing = pd.read_csv(output_path)
+                if {'author', 'song_title'}.issubset(existing.columns):
+                    processed_songs = set(
+                        zip(existing['author'].astype(str), existing['song_title'].astype(str))
+                    )
+                    print(f"🔁 Found existing output file with {len(processed_songs)} processed songs. Resuming from last unprocessed one...")
+                else:
+                    print("⚠️ Output file found but missing expected columns. Starting from scratch.")
+            except Exception as e:
+                print(f"⚠️ Could not read existing output file: {e}")
+        else:
+            print("📄 No existing output file found. Starting fresh.")
+
+        start_time = time.time()
+        total_time = 0
+        total_songs = len(songs_to_apply)
+        all_author_words = self.analyze_author_text()
+
+        for idx, row in songs_to_apply.iterrows():
+            song_title = str(row['name_of_sample_song'])
+            author = str(row['author'])
+
+            
+            if (author, song_title) in processed_songs:
+                print(f"[{idx+1}/{total_songs}] ⏩ Skipping already processed '{song_title}' by '{author}'")
+                continue
+
+            print(f"[{idx+1}/{total_songs}] Processing '{song_title}' by '{author}'")
+
+            extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
+            styles_to_apply = list(extracted_styles.keys())
+            example_song=self.extract_n_random_songs_for_author(row['author'],number_of_songs=1)
+            prompt, styles_string = self.create_idf_styles_example_prompt(
+                author=author,
+                all_author_words=all_author_words,
+                styles=styles_to_apply,
+                example_song=example_song
+            )
+
+            success = False
+            retries = 0
+            max_retries = 3
+
+            while not success and retries < max_retries:
+                try:
+                    start = time.time()
+
+                    if model == 'nova':
+                        result = self.invoke_nova_micro(prompt, system)
+                    elif model == 'claude':
+                        result = self.invoke_claude_model(prompt, system)
+
+                    if not result or 'output' not in result or 'message' not in result['output']:
+                        raise ValueError("Invalid API response")
+
+                    
+                    self.write_to_csv_only_styles(
+                        author, song_title, styles_string, result,
+                        output_path=output_path
+                    )
+
+                    elapsed = time.time() - start
+                    total_time += elapsed
+                    print(f"[{idx+1}/{total_songs}] ✅ Processed '{song_title}' - {elapsed:.2f}s (Total {total_time:.2f}s)")
+
+                    wait_time = random.uniform(5, 10)
+                    print(f"Waiting {wait_time:.2f}s before next song...")
+                    time.sleep(wait_time)
+
+                    success = True
+
+                except Exception as e:
+                    retries += 1
+                    print(f"[{idx+1}/{total_songs}] ⚠️ Error processing '{song_title}': {e}")
+                    traceback.print_exc()
+
+                    if "ThrottlingException" in str(e):
+                        wait_time = random.uniform(20, 40)
+                        print(f"Throttled! Waiting {wait_time:.2f}s before retrying...")
+                    else:
+                        wait_time = random.uniform(10, 20)
+                        print(f"Retrying after {wait_time:.2f}s...")
+
+                    time.sleep(wait_time)
+
+            if not success:
+                print(f"[{idx+1}/{total_songs}] ❌ Skipping '{song_title}' after {max_retries} failed attempts.")
+
+        
+        total_elapsed = time.time() - start_time
+        print("\n🏁 All songs processed!")
+        print(f"✅ Total songs in list: {total_songs}")
+        print(f"✅ Already processed (skipped): {len(processed_songs)}")
+        print(f"✅ Newly processed this run: {total_songs - len(processed_songs)}")
+        print(f"🕒 Total runtime: {total_elapsed/60:.2f} minutes\n")
+    
+    
     def write_to_csv_only_styles(self, author, song_title, styles_to_apply, result, output_path='author_songs_created_only_with_styles.csv'):
         text = result['output']['message']['content'][0]['text']
 
@@ -1038,7 +1221,7 @@ class StyleTransferLocal:
         return response
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
 total_start=time.time()
-st.fill_csv_using__styles_idf(styles_from='all_styles_to_create.csv',model='claude',output_path='all_styles_idf_claude.csv')
+st.fill_csv_using__styles_idf_example_song_to_emiluate(styles_from='all_styles_to_create.csv',model='claude',output_path='all_styles_idf_claude.csv')
 print(f'Time in the end {time.time()-total_start} s')
 #(1741+ 255 * 9)/60=67 минути  klod. 
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
