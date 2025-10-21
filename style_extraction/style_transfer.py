@@ -14,6 +14,7 @@ import json
 import re
 from collections import Counter
 from sklearn.feature_extraction.text import TfidfVectorizer
+import traceback
 class StyleTransferLocal:
     
     def __init__(self,model="trajkovnikola/MKLLM-7B-Instruct"):
@@ -777,48 +778,77 @@ class StyleTransferLocal:
             except Exception as e:
                 print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
    
-    def fill_csv_using__styles_idf(self,model='claude',output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'):
+    def fill_csv_using__styles_idf(self, model='claude', output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
         
         start_time = time.time()
-        total_time=0
+        total_time = 0
         total_songs = len(songs_to_apply)
-        all_author_words=self.analyze_author_text()
-        for idx, row in songs_to_apply.iterrows():
-            try:
-                extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
-                styles_to_apply = list(extracted_styles.keys())
-                prompt, styles_string = self.create_idf_styles_prompt(
-                    author=row['author'],
-                    all_author_words=all_author_words,
-                    styles=styles_to_apply
-                )
-                start_time = time.time()
-                if model=='nova':
-                    result = self.invoke_nova_micro(prompt,system)
-                elif model=='claude':
-                    result=self.invoke_claude_model(prompt,system)
-               
-                if not result or 'output' not in result or 'message' not in result['output']:
-                    print(f"[{idx+1}/{total_songs}] Warning: No valid reply from API for song '{row['name_of_sample_song']}' by '{row['author']}'")
-                    continue
-                
-                self.write_to_csv_only_styles(
-                    row['author'],
-                    row['name_of_sample_song'],
-                    styles_string,
-                    result,
-                    output_path=output_path
-                )
-                
-                elapsed = time.time() - start_time
-                total_time+=elapsed
-                print(f"[{idx+1}/{total_songs}] Processed '{row['name_of_sample_song']}' by '{row['author']}' - Time elapsed: {elapsed:.2f}s-Total {total_time:.2f}")
-            
-            except Exception as e:
-                print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
+        all_author_words = self.analyze_author_text()
 
+        for idx, row in songs_to_apply.iterrows():
+            song_title = row['name_of_sample_song']
+            author = row['author']
+            print(f"[{idx+1}/{total_songs}] Processing '{song_title}' by '{author}'")
+
+            extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
+            styles_to_apply = list(extracted_styles.keys())
+            prompt, styles_string = self.create_idf_styles_prompt(
+                author=author,
+                all_author_words=all_author_words,
+                styles=styles_to_apply
+            )
+
+            success = False
+            retries = 0
+            max_retries = 3
+
+            while not success and retries < max_retries:
+                try:
+                    start = time.time()
+
+                    if model == 'nova':
+                        result = self.invoke_nova_micro(prompt, system)
+                    elif model == 'claude':
+                        result = self.invoke_claude_model(prompt, system)
+
+                    if not result or 'output' not in result or 'message' not in result['output']:
+                        raise ValueError("Invalid API response")
+
+                    #
+                    self.write_to_csv_only_styles(
+                        author, song_title, styles_string, result,
+                        output_path=output_path
+                    )
+
+                    elapsed = time.time() - start
+                    total_time += elapsed
+                    print(f"[{idx+1}/{total_songs}] ✅ Processed '{song_title}' - {elapsed:.2f}s (Total {total_time:.2f}s)")
+
+                    
+                    wait_time = random.uniform(5, 10)
+                    print(f"Waiting {wait_time:.2f}s before next song...")
+                    time.sleep(wait_time)
+
+                    success = True
+
+                except Exception as e:
+                    retries += 1
+                    print(f"[{idx+1}/{total_songs}] ⚠️ Error processing '{song_title}': {e}")
+                    traceback.print_exc()
+
+                    if "ThrottlingException" in str(e):
+                        wait_time = random.uniform(20, 40)
+                        print(f"Throttled! Waiting {wait_time:.2f}s before retrying...")
+                    else:
+                        wait_time = random.uniform(10, 20)
+                        print(f"Retrying after {wait_time:.2f}s...")
+                    
+                    time.sleep(wait_time)
+
+            if not success:
+                print(f"[{idx+1}/{total_songs}] ❌ Skipping '{song_title}' after {max_retries} failed attempts.")
     def write_to_csv_only_styles(self, author, song_title, styles_to_apply, result, output_path='author_songs_created_only_with_styles.csv'):
         text = result['output']['message']['content'][0]['text']
 
@@ -1007,7 +1037,8 @@ class StyleTransferLocal:
         )
         return response
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.fill_csv_using__styles_idf(output_path='author_songs_created_using_styles_idf_stop_words_removed_claude.csv')
+st.fill_csv_using__styles_idf(output_path='author_songs_created_using_styles_idf_stop_words_removed_claude_0.csv')
 
-
+#(1741+ 255 * 9)/60=67 минути  klod. 
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
+“
