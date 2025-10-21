@@ -710,7 +710,7 @@ class StyleTransferLocal:
         prompt += "\n".join(f"- {key}" for key in sorted_keys)
         prompt+="\nИзгенерирај македонска поезија користејќи ги горе наведените насоки на значење.  Песната мора да има наслов. Насловот запиши го во следниот формат "
         prompt+="<НАСЛОВ>Тука вметни го насловот </НАСЛОВ> . Песната генерирај ја во раммките на <ПЕСНА>Тука вметни ја песната </ПЕСНА>."
-        prompt+="Не ги користи имињата на самите насоки на значење.Биди креативен!"
+        prompt+="Не ги користи имињата на самите насоки на значење.Биди креативен! Да нема премногу рима, затоа што тоа наликува на песна генерирана од модел. Користи нерегуларни зборови."
         return prompt,styles_string
     
     def create_idf_styles_prompt(self, author, all_author_words, num_words=10, styles=None):
@@ -778,9 +778,9 @@ class StyleTransferLocal:
             except Exception as e:
                 print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
    
-    def fill_csv_using__styles_idf(self, model='claude', output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'):
+    def fill_csv_using__styles_idf(self,styles_from='author_songs_to_create_only_with_styles.csv', model='claude', output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
-        songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
+        songs_to_apply = pd.read_csv(styles_from)
         
         start_time = time.time()
         total_time = 0
@@ -845,7 +845,7 @@ class StyleTransferLocal:
                         wait_time = random.uniform(10, 20)
                         print(f"Retrying after {wait_time:.2f}s...")
                     
-                    time.sleep(wait_time)
+                    time.sleep(wait_time)   
 
             if not success:
                 print(f"[{idx+1}/{total_songs}] ❌ Skipping '{song_title}' after {max_retries} failed attempts.")
@@ -1031,14 +1031,14 @@ class StyleTransferLocal:
             system=[{"text": system}],
             inferenceConfig={
                 "maxTokens": 2000,
-                "temperature": 0.7,
+                "temperature": 1,
                 "topP": 0.999
             }
         )
         return response
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.fill_csv_using__styles_idf(output_path='author_songs_created_using_styles_idf_stop_words_removed_claude_0.csv')
-
+total_start=time.time()
+st.fill_csv_using__styles_idf(styles_from='all_styles_to_create.csv',model='claude',output_path='all_styles_idf_claude.csv')
+print(f'Time in the end {time.time()-total_start} s')
 #(1741+ 255 * 9)/60=67 минути  klod. 
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
-“
