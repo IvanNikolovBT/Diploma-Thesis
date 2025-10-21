@@ -743,39 +743,58 @@ class StyleTransferLocal:
 
         return prompt, "\n".join(styles)
     
-    def create_idf_styles_example_prompt(self, author, all_author_words, example_song,num_words=10 ,styles=None):
+    def create_idf_styles_example_prompt(self, author, all_author_words, example_song, num_words=10, styles=None):
+        
+
         if styles is None:
             styles = []
 
-        
+        # Clean styles
         styles = [s.strip() for s in styles if isinstance(s, str) and s.strip()]
 
-        
+        # Get top expressive words
         most_common_words = all_author_words['expressive_words'][author]
         top_words = [word for word, _ in most_common_words[:num_words]]
 
-       
-        styles_string = "\n".join(f"- {key}" for key in styles)
+        # Format styles and words
+        styles_string = "\n".join(f"- {key}" for key in styles) if styles else "- (нема избрани стилови)"
         words_string = ", ".join(top_words)
 
-        
-        prompt = "Стилски фигури што треба да се искористат:\n"
-        prompt += styles_string if styles_string else "- (нема избрани стилови)"
-        prompt += "\n\nНајчести зборови кои треба да се искористат во песната:\n"
-        prompt += words_string
-        prompt += (
-            "\n\nИзгенерирај македонска поезија користејќи ги горенаведените стилски фигури и зборови. "
+        # --- ✅ Extract the actual song text ---
+        if isinstance(example_song, pd.DataFrame):
+            if 'song_text' in example_song.columns:
+                # Concatenate all song_text rows into one string
+                example_text = "\n".join(example_song['song_text'].astype(str).tolist())
+            else:
+                raise KeyError("DataFrame does not contain a 'song_text' column.")
+        elif isinstance(example_song, dict) and 'song_text' in example_song:
+            # Handle dict containing a Series or list
+            song_texts = example_song['song_text']
+            if hasattr(song_texts, "tolist"):
+                example_text = "\n".join(map(str, song_texts.tolist()))
+            else:
+                example_text = str(song_texts)
+        else:
+            # Fallback if user passes a string directly
+            example_text = str(example_song)
+
+        # --- Build final prompt ---
+        prompt = (
+            "Стилски фигури што треба да се искористат:\n"
+            f"{styles_string}\n\n"
+            "Најчести зборови кои треба да се искористат во песната:\n"
+            f"{words_string}\n\n"
+            "Изгенерирај македонска поезија користејќи ги горенаведените стилски фигури и зборови. "
             "Песната мора да има наслов. Насловот запиши го во следниот формат: "
             "<НАСЛОВ>Тука вметни го насловот</НАСЛОВ>. "
             "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
-            "Не ги користи имињата на самите насоки на значење. Биди креативен!"
-            "Пример песна од авторот"
-            
+            "Не ги користи имињата на самите насоки на значење. Биди креативен!\n\n"
+            "Пример песна од авторот:\n"
+            f"{example_text.strip()}"
         )
-        prompt+=example_song
 
+        print(prompt)
         return prompt, "\n".join(styles)
-    
     def fill_csv_using_only_styles(self):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
@@ -985,8 +1004,8 @@ class StyleTransferLocal:
                     if model == 'nova':
                         result = self.invoke_nova_micro(prompt, system)
                     elif model == 'claude':
-                        result = self.invoke_claude_model(prompt, system)
-
+                        #result = self.invoke_claude_model(prompt, system)
+                        pass
                     if not result or 'output' not in result or 'message' not in result['output']:
                         raise ValueError("Invalid API response")
 
@@ -1221,7 +1240,7 @@ class StyleTransferLocal:
         return response
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
 total_start=time.time()
-st.fill_csv_using__styles_idf_example_song_to_emiluate(styles_from='all_styles_to_create.csv',model='claude',output_path='all_styles_idf_claude.csv')
+st.fill_csv_using__styles_idf_example_song_to_emiluate(styles_from='all_styles_to_create.csv',model='claude',output_path='all_styles_idf_claude_example.csv')
 print(f'Time in the end {time.time()-total_start} s')
 #(1741+ 255 * 9)/60=67 минути  klod. 
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
