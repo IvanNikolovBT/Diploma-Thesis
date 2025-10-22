@@ -54,7 +54,67 @@ class StyleTransferLocal:
     def extract_all_songs_for_author(self, author_name='Блаже Конески'):
         return self.df[self.df['author'] == author_name]
     
- 
+    def legacy_extract_style_from_song(self,song,target_feature,target_feature_definition):
+        
+        user_message_mk_llm = (
+            f"{target_feature_definition}\n"
+            "Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор.\n\n"
+            f"Напиши краток опис дали авторот на следниот пасус ја содржи оваа особина: {target_feature}.\n"
+            "Одговори со Да или Не.\n\n"
+            "Следуваат неколку примери:\n\n"
+
+            "Пример 1:\n"
+            "Особина: Сарказам\n"
+            "Пасус: „О, прекрасно! Баш сакав да ми се расипе телефонот сред бел ден.“\n"
+            "Опис: Авторот зборува иронично, изразувајќи спротивно од тоа што мисли. Одговор: Да.\n\n"
+
+            "Пример 2:\n"
+            "Особина: Сарказам\n"
+            "Пасус: „Мојот телефон се расипа денес и тоа ми го уништи денот.“\n"
+            "Опис: Авторот директно го изразува своето незадоволство без иронија или потсмев. Одговор: Не.\n\n"
+
+            
+            "Пример 3:\n"
+            "Особина: Активен глас\n"
+            "Пасус: „Јас ја напишав песната за еден час.“\n"
+            "Опис: Авторот користи активен глас каде што подметот ја извршува дејството. Одговор: Да.\n\n"
+
+            f"Пасус:\n{song}\n\nОпис:"
+        )
+        user_message_vezilka = (
+            f"{target_feature_definition}\n"
+            "Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор.\n\n"
+            f"Одговори на пашањето дали авторот на следниот пасус ја содржи оваа особина: {target_feature}.\n"
+            "Одговори со Да,присутно! или Не!.\n\n"
+            "Биди многу строг при својата одлука, ако си сигурен дека е присутна карактеристиката, тогаш запиши одогори со да."
+            f"Пасус:\n{song}\n\nОпис:"
+        )
+        messages = [self.system,{"role": "user", "content": user_message_vezilka}]
+
+        payload_mk_llm = {
+        "model": self.model,
+        "messages": messages,
+        "temperature": 0.3,
+        "repetition_penalty":2,
+        "frequency_penalty": 0.4,
+        "presence_penalty": 0.3,
+        "top_p": 0.9,
+        "max_tokens":200,
+        "stop": ["\n","\n\n","<|im_end|>"]}
+        payload_vezilka = {
+        "model": self.model,
+        "messages": messages,
+        "temperature": 0.4,
+        "top_p": 0.9,
+        "max_tokens":200,
+        "stop": ["\n","\n\n","<|im_end|>"]}
+        resp = requests.post("http://127.0.0.1:8080/v1/chat/completions",
+        headers={"Content-Type": "application/json"},
+        json=payload_vezilka)
+        
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+    
     def invoke_nova_micro(self, prompt, system):
         response = self.client.converse(
             modelId="arn:aws:bedrock:eu-central-1::inference-profile/eu.amazon.nova-micro-v1:0", 
@@ -142,6 +202,50 @@ class StyleTransferLocal:
 
         print("✅ All songs processed.")
         
+    def legacy_extract_style_from_songs(self, sample_songs=[], output_dir=''):
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        output_path = os.path.join(output_dir, "extracted_styles.csv") if output_dir else "extracted_styles.csv"
+
+        total_time=0
+        file_exists = os.path.exists(output_path)
+
+        for _, row in sample_songs.iterrows():
+            author = row["author"]
+            song = row["song_title"]
+            original_song = row["song_text"]
+
+            for category, definition in self.styles.items():
+                start_time = time.time()
+
+                extracted_text=self.legacy_extract_style_from_song(song,category,definition)
+                
+                end_time = time.time()
+                time_needed = end_time - start_time
+
+                
+                df_row = pd.DataFrame([{
+                    "author": author,
+                    "song": song,
+                    "style_feature_category": category,
+                    "extracted_text": extracted_text,
+                    #"original_song": original_song,
+                    "time_needed": time_needed
+                }])
+                total_time+=time_needed
+                
+                df_row.to_csv(output_path, mode="a", index=False, header=not file_exists)
+                file_exists = True
+
+                
+                print(f"[SAVED] Author='{author}', Song='{song}', Style='{category}', Time={time_needed:.2f}s")
+            
+            print(f'Total time {total_time:.2f}')
+    def legacy_iterate_over_author(self,author):
+        songs=self.extract_n_random_songs_for_author(author_name=author,number_of_songs=1)
+        self.legacy_extract_style_from_song(songs)
+
     def get_present_styles_for_song(self, title, author):
         self.df = pd.read_csv(self.styles_path)
         pattern = r'^Да' 
@@ -371,6 +475,160 @@ class StyleTransferLocal:
                 log_file.flush()
 
         return song, log_path
+    def legacy_apply_styles_all_at_once(self, sf_styles, st_song_text,st_styles):
+        song = st_song_text
+        max_words = len(st_song_text.split()) 
+        target_features = []
+        target_feature_definitions = []
+        
+        
+        for _, row in sf_styles.iterrows():
+            target_feature = row['style_feature_category']
+            if target_feature not in st_styles['style_feature_category'].values:
+                target_features.append(target_feature)
+                target_feature_definitions.append(self.styles[target_feature])
+        
+        
+        if not target_features:
+            return song
+        print(target_features)
+        definitions_text = "Дефиниции на особини:\n" + "\n".join(
+            [f"{i+1}. {target_features[i]} – {target_feature_definitions[i]}" for i in range(len(target_features))]
+        )
+        
+        example_1 = (
+            "Особина: Сарказам\n"
+            "Оригинално: Денес работев цел ден без пауза.\n"
+            "Со „Сарказам“: О, прекрасно, токму тоа ми требаше — уште еден ден без одмор!\n"
+        )
+        example_2 = (
+            "Особина: Активен глас\n"
+            "Оригинално: Писмото беше испратено од мене.\n"
+            "Со „Активен глас“: Јас го испратив писмото.\n"
+        )
+        
+       
+        styles_list = ", ".join(target_features)
+        user_message = (
+            f"{definitions_text}\n"
+            f"Овие се  дефинициите на стиловите, не ги давај нив во твојот одговор.\n\n"
+            f"Искористи ги сите овие особини: {styles_list} ВРЗ песната истовремено.\n"
+            f"Како одговор врати ја назад песната, но со применети {styles_list} врз нејзе. Оваа е клучно.\n"
+            f"Следуваат два примери:\n"
+            f'{example_1}\n'
+            f'{example_2}\n'
+            f"Пасус:\n{song}\n\nОбработена песна со применети стилови:"
+        )
+        
+        new_system = {
+            "role": "system",
+            "content": "[INST]Разговор помеѓу корисник и разговорник за применување на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>"
+        }
+        messages = [new_system, {"role": "user", "content": user_message}]
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.5,
+            "top_p": 0.9,
+            "stop": ["\n\n\n","<|im_end|>"],
+            "max_tokens":int(1.5*max_words),
+  
+        }
+        
+        start = time.time()
+        resp = requests.post(
+            "http://127.0.0.1:8080/v1/chat/completions",
+            headers={"Content-Type": "application/json"},
+            json=payload
+        )
+        print(f'Time needed for applying all styles: {time.time() - start}')
+        
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+    def legacy_transfer_style(self,sf_author,sf_song_title,st_author,st_song_text,st_song_title): 
+        #self,sf_author,sf_song_title):
+        sf_selected=self.get_present_styles_for_song(sf_song_title,sf_author)
+        st_selected=self.get_present_styles_for_song(st_song_title,st_author)
+        return self.apply_styles_iterative(sf_styles=sf_selected,st_song_text=st_song_text,st_styles=st_selected,st_song_title=st_song_title,st_author=st_author)
+    def legacy_extract_style_from_all_songs(self, songs_csv, output_filename="extracted_styles_1.csv", save_every=100):    
+        if not os.path.exists(songs_csv):
+            raise FileNotFoundError(f"CSV file not found: {songs_csv}")
+        sample_songs = pd.read_csv(songs_csv)
+        print(f"📄 Loaded {len(sample_songs)} songs from {songs_csv}")
+
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_path = os.path.join(script_dir, output_filename)
+        
+        if os.path.exists(output_path):
+            existing_df = pd.read_csv(output_path)
+            processed = set(zip(
+                existing_df["author"],
+                existing_df["song"],
+                existing_df["style_feature_category"]
+            ))
+            print(f"🔁 Found existing file with {len(processed)} processed entries. Resuming...")
+            file_exists = True
+        else:
+            processed = set()
+            file_exists = False
+            print("🆕 No existing file found. Starting fresh.")
+
+        buffer = []
+        total_time = 0.0
+        counter = 0
+
+        total_items = len(sample_songs) * len(self.styles)
+        pbar = tqdm(total=total_items, desc="Extracting styles", ncols=100)
+
+        for _, row in sample_songs.iterrows():
+            author = row["author"]
+            song = row["song_title"]
+            
+
+            for category, definition in self.styles.items():
+                key = (author, song, category)
+                if key in processed:
+                    pbar.update(1)
+                    continue
+
+                start_time = time.time()
+                try:
+                    extracted_text = self.legacy_extract_style_from_song(song, category, definition)
+                except Exception as e:
+                    print(f"❌ Error processing {key}: {e}")
+                    pbar.update(1)
+                    continue
+
+                time_needed = time.time() - start_time
+                total_time += time_needed
+
+                buffer.append({
+                    "author": author,
+                    "song": song,
+                    "style_feature_category": category,
+                    "extracted_text": extracted_text,
+                    "time_needed": time_needed
+                })
+                processed.add(key)
+                counter += 1
+                pbar.update(1)
+
+                
+                if counter % save_every == 0:
+                    pd.DataFrame(buffer).to_csv(output_path, mode="a", index=False, header=not file_exists)
+                    file_exists = True
+                    buffer = []
+                    print(f"💾 Progress saved ({counter} items processed so far).")
+
+        
+        if buffer:
+            pd.DataFrame(buffer).to_csv(output_path, mode="a", index=False, header=not file_exists)
+            print("💾 Final save completed.")
+
+        pbar.close()
+        print(f"\n🏁 Extraction complete. Total time: {total_time:.2f}s")  
     def create_csv_for_extraction(self,
                                 number_of_songs=10,
                                 styles_path='api_styles_all_in_one_text.csv',
