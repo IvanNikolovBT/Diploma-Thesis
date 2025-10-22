@@ -796,9 +796,10 @@ class StyleTransferLocal:
         )
 
         return prompt, "\n".join(styles)
-    def fill_csv_using_only_styles(self):
+    def fill_csv_using_only_styles(self,input_path,model='claude'):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
-        songs_to_apply = pd.read_csv('author_songs_to_create_only_with_styles.csv')
+        #author_songs_to_create_only_with_styles.csv'
+        songs_to_apply = pd.read_csv(input_path)
         
         start_time = time.time()
         total_time=0
@@ -809,8 +810,10 @@ class StyleTransferLocal:
                 extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
                 styles_to_apply = extracted_styles.keys()
                 prompt,styles_string = self.create_only_styles_prompt(styles_to_apply)
-                
-                result = self.invoke_nova_micro(prompt=prompt, system=system)
+                if model=='claude':
+                    result = self.invoke_claude_model(prompt=prompt, system=system)
+                elif model=='micro':
+                    result = self.invoke_nova_micro(prompt=prompt, system=system)
                 
                
                 if not result or 'output' not in result or 'message' not in result['output']:
@@ -1123,7 +1126,7 @@ class StyleTransferLocal:
 
         results = {'common_words': {}, 'expressive_words': {}}
 
-        # Default stop words if not provided
+        
         default_stop_words = [
             'ќе', 'би', 'ко', 'го', 'како', 'ги', 'ми', 'ти', 'те', 'му', 'само',
             'зашто', 'таа', 'тие', 'нè', 'но', 'сè', 'со', 'по', 'ли', 'ој', 'ни',
@@ -1138,7 +1141,7 @@ class StyleTransferLocal:
             texts = df[df['author'] == author]['song_text_processed']
             all_words = ' '.join(texts).split()
 
-            # Remove author's own name
+            
             author_names = author.lower().split()
             author_first_name = author_names[0] if len(author_names) > 0 else ''
             author_last_name = author_names[-1] if len(author_names) > 1 else ''
@@ -1152,7 +1155,7 @@ class StyleTransferLocal:
             common_words = [(word, count) for word, count in word_counts.most_common(n_top_words)]
             results['common_words'][author] = common_words
 
-        # TF-IDF part
+        
         vectorizer = TfidfVectorizer(
             min_df=min_df,
             max_df=max_df,
@@ -1313,15 +1316,15 @@ class StyleTransferLocal:
         
         return output_csv
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-total_start=time.time()
-column='new_song'
-st.create_csv_with_perplexity('all_styles_idf_claude.csv',column)
-#(1741+ 255 * 9)/60=67 минути  klod. 
+st.fill_csv_using_only_styles()
+#column='song_text'
+#st.create_csv_with_perplexity('classification/cleaned_songs.csv',column)
+
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
 
 #so primeri pesni - idf - stilovi  1200 claude X
 # idf - stilovi - 1200  claude X
-#idf 1200 claude
+#idf 1200 claude 
 #stilovi 1200 claude
 #ime na avtor samo - testiranje na znaenje claude
 
@@ -1331,4 +1334,9 @@ st.create_csv_with_perplexity('all_styles_idf_claude.csv',column)
 #stilovi 1200 aws micro
 #ime na avtor samo - testiranje na znaenje aws micro
 
+#original pesni perplexity X
+
+#author tf idf similarity csv
+#author cosine smilairty csv
+#author transformer simliarty csv
 
