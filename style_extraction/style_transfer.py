@@ -1238,29 +1238,22 @@ class StyleTransferLocal:
             }
         )
         return response
-    def perplexity_multilingual(text, model_name="ai-forever/mGPT"):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.float16,      
-            low_cpu_mem_usage=True,         
-            device_map="auto"               
-        )
-        model.eval()
-        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
-        with torch.no_grad():
-            outputs = model(**inputs, labels=inputs["input_ids"])
-            loss = outputs.loss
-        return torch.exp(loss).item()
 
-    def create_csv_with_perplexity(self,input_csv):
+    def create_csv_with_perplexity(self,input_csv,column):
         
         df_input = pd.read_csv(input_csv)
         
-        
-        df_output = df_input.copy()
-        
+        output_csv = f"{input_csv.rsplit('.', 1)[0]}_with_perplexity.csv"
+        if os.path.exists(output_csv):
+            print(f"Found existing {output_csv}. Resuming from existing data.")
+            df_output = pd.read_csv(output_csv)
+            if len(df_output) != len(df_input):
+                print(f"Warning: {output_csv} has {len(df_output)} rows, expected {len(df_input)}. Reverting to input copy.")
+                df_output = df_input.copy()
+                df_output['perplexity'] = float('nan')
+        else:
+            df_output = df_input.copy()
+            df_output['perplexity'] = float('nan')
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model_name = "ai-forever/mGPT"
@@ -1274,30 +1267,45 @@ class StyleTransferLocal:
         model.eval()
         
         
-        df_output['perplexity'] = float('nan')  
-        for idx, row in df_output.iterrows():
-            text = row['new_song']
+        if not os.path.exists(output_csv):
+            df_output.to_csv(output_csv, index=False)
+        
+        
+        total_rows = len(df_output)
+        
+        
+        for idx, row in tqdm(df_output.iterrows(), total=total_rows, desc="Processing rows"):
+            
+            if pd.notna(df_output.at[idx, 'perplexity']):
+                print(f"Row {idx+1}/{total_rows}: Already processed (perplexity: {df_output.at[idx, 'perplexity']}).")
+                continue
+            
+            text = row[column]
             if pd.notna(text) and isinstance(text, str) and text.strip():
                 try:
                     inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
                     with torch.no_grad():
                         outputs = model(**inputs, labels=inputs["input_ids"])
                         loss = outputs.loss
-                    df_output.at[idx, 'perplexity'] = torch.exp(loss).item()
+                    perplexity = torch.exp(loss).item()
+                    df_output.at[idx, 'perplexity'] = perplexity
+                    print(f"Row {idx+1}/{total_rows}: Perplexity = {perplexity}")
+                    
+                    
+                    if idx == 0:
+                        df_output.iloc[[idx]].to_csv(output_csv, mode='w', index=False)  
+                    else:
+                        df_output.iloc[[idx]].to_csv(output_csv, mode='a', header=False, index=False)  
                 except Exception as e:
-                    print(f"Error calculating perplexity for row {idx}: {e}")
+                    print(f"Row {idx+1}/{total_rows}: Error calculating perplexity: {e}")
                     df_output.at[idx, 'perplexity'] = float('nan')
+                    df_output.iloc[[idx]].to_csv(output_csv, mode='a', header=False, index=False)
             else:
-                print(f"Skipping row {idx}: Invalid or empty text")
+                print(f"Row {idx+1}/{total_rows}: Skipping invalid or empty text")
+                df_output.at[idx, 'perplexity'] = float('nan')
+                df_output.iloc[[idx]].to_csv(output_csv, mode='a', header=False, index=False)
         
-        
-        output_csv = f"{input_csv.rsplit('.', 1)[0]}_with_perplexity.csv"
-        
-        
-        df_output.to_csv(output_csv, index=False)
         print(f"Output saved to {output_csv}")
-        
-        
         if 'perplexity' not in df_input.columns:
             print("Original DataFrame unchanged (immutable).")
         else:
@@ -1306,6 +1314,21 @@ class StyleTransferLocal:
         return output_csv
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
 total_start=time.time()
-st.create_csv_with_perplexity()
+column='new_song'
+st.create_csv_with_perplexity('all_styles_idf_claude.csv',column)
 #(1741+ 255 * 9)/60=67 минути  klod. 
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
+
+#so primeri pesni - idf - stilovi  1200 claude X
+# idf - stilovi - 1200  claude X
+#idf 1200 claude
+#stilovi 1200 claude
+#ime na avtor samo - testiranje na znaenje claude
+
+#so primeri pesni - idf - stilovi  1200  aws micro
+# idf - stilovi - 1200 aws micro
+#idf 1200 aws micro
+#stilovi 1200 aws micro
+#ime na avtor samo - testiranje na znaenje aws micro
+
+
