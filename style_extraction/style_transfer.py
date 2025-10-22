@@ -1,14 +1,12 @@
 import sys
 import os
 import pandas as pd
-import requests
 import random
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 from poetry_DB import PoetryDB
 import time
 from tqdm import tqdm
-import datetime
 import boto3
 import json
 import re
@@ -17,18 +15,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-class StyleTransferLocal:
+class StyleTransfer:
     
-    def __init__(self,model="trajkovnikola/MKLLM-7B-Instruct"):
+    def __init__(self):
 
-        self.system={"role": "system","content": 
-            ("[INST]Разговор помеѓу корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.Ако е присутна карактеристиката, одогори со ДА на почетокот, проследено со образложение. Ако не е присутна, одговори само со НЕ и ништо друго.[/INST]</s>.")}        
         self.db=PoetryDB()
         self.CSV_PATH="classification/cleaned_songs.csv"
         self.df=pd.read_csv(self.CSV_PATH)
         self.random_seed=47
-        self.styles_path='style_extraction/vezilka_test.cvs'
-        self.model=model
         self.styles=self.load_styles()
         self.client = boto3.client("bedrock-runtime",region_name="eu-central-1",)
     
@@ -44,17 +38,13 @@ class StyleTransferLocal:
             n=min(number_of_songs, len(author_songs)),
             random_state=None  
         )
-    def extract_n_random_styles_for_author(self, author_name='Блаже Конески', number_of_songs=10):
+    def extract_n_random_songs_with_styles_for_author(self, author_name='Блаже Конески', number_of_songs=10):
         styles=pd.read_csv('api_styles_all_in_one_text.csv')
         author_songs = styles[styles['author'] == author_name]
         return author_songs.sample(
             n=min(number_of_songs, len(author_songs)),
             random_state=None  
         )
-    def extract_all_songs_for_author(self, author_name='Блаже Конески'):
-        return self.df[self.df['author'] == author_name]
-    
- 
     def invoke_nova_micro(self, prompt, system):
         response = self.client.converse(
             modelId="arn:aws:bedrock:eu-central-1::inference-profile/eu.amazon.nova-micro-v1:0", 
@@ -72,17 +62,12 @@ class StyleTransferLocal:
             }
         )
         return response
-        
     def write_to_csv(self,author:str,song_title:str,result:json,output_path='api_styles_all_in_one_text.csv'):
         
         text=result['output']['message']['content'][0]['text'] 
-        
-                 
-        
         input_tokens=result['usage']['inputTokens']
         output_tokens=result['usage']['outputTokens']
         total_tokens=result['usage']['totalTokens']
-        
         ms=result['metrics']['latencyMs']
         
         row={'author':author,
@@ -96,15 +81,14 @@ class StyleTransferLocal:
         api_csv = pd.DataFrame([row])
         file_exists = os.path.isfile(output_path)
         api_csv.to_csv(output_path, mode="a", index=False, header=not file_exists, encoding="utf-8")
-        
     def extract_styles_from_song_using_api(self,song,author,song_title,output_path,without_def=True):
         system="Ти си разговорник за екстракција на стил на македонска поезија."
         if without_def:
-            prompt=self.create_full_prompt_without_definition(song)
+            prompt=self.create_full_extraction_prompt_without_definition(song)
         else:
-            prompt=self.create_full_prompt_with_definition(song)
+            prompt=self.create_full_extraction_prompt_with_definition(song)
         result=self.invoke_nova_micro(prompt,system)
-        self.write_to_csv(author,song_title,result,output_path)
+        self.write_to_csv(author,song_title,result,output_path) 
     def extract_all_styles_api(self):
         output_path = 'api_styles_all_in_one_text.csv'
 
@@ -141,83 +125,7 @@ class StyleTransferLocal:
 
 
         print("✅ All songs processed.")
-        
-    def get_present_styles_for_song(self, title, author):
-        self.df = pd.read_csv(self.styles_path)
-        pattern = r'^Да' 
-        return self.df[
-            (self.df['author']== author) & (self.df['song']==title) &
-            (self.df['extracted_text'].str.match(pattern, na=False))
-        ]
-    def apply_styles_iterative(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
-        if log_path is None:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_path = f"song_style_log_{st_song_title or 'song'}_{ts}.txt"
-            log_path = "".join(c for c in log_path if c.isalnum() or c in (' ','.','_','-')).rstrip()
-
-        log_dir = os.path.dirname(log_path)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-
-        new_song=st_song_text
-        list1=sf_styles['style_feature_category'].unique().tolist()
-        list2=st_styles['style_feature_category'].unique().tolist()
-        diff = [item for item in list1 if item not in list2]
-    
-        cumulative=0
-        with open(log_path, "a", encoding="utf-8") as log_file:
-            i=0
-            for style in diff:
-                target_dif=self.styles[style]
-                user_message = (
-                        f"{target_dif}\n Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор\n\n"
-                        f"Искористи ја оваа особина {style} ВРЗ песната: .\n"
-                        f"Следувват два примери:\n"
-                        f"Пасус:\n{new_song}\n\n Обработена песна: <Генерирај ја песната тука ве замолувам>"
-                    )
-                new_system={"role": "system","content": 
-                    ("[INST]Разговор помеѓу корисник и разговорник  за применување на  стил македонска поезија. Асистентот дава песна со применет стил по барање на корисникот.[/INST]</s>.")}
-                    
-                messages = [new_system, {"role": "user", "content": user_message}]
-
-                payload = {
-                        "model": self.model,
-                        "messages": messages,
-                        "top_p": 0.9,
-                        'early_stopping':True,
-                        "frequency_penalty": 0.2,
-                        "presence_penalty": 0.15,
-                        'stop': ["<|im_end|>"],
-                        "max_tokens":int(1.5*len(st_song_text)),
-                    }
-                start_time=time.time()
-                resp = requests.post(
-                            "http://127.0.0.1:8080/v1/chat/completions",
-                            headers={"Content-Type": "application/json"},
-                            json=payload,
-                            timeout=200
-                        )
-                duration = time.time() - start_time
-                cumulative += duration
-                data = resp.json()
-                new_song = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-                print("\n" + "="*40)
-                print(f"Iteration {i+1}/{len(diff)} - style added: {target_dif}")
-                print(f"Duration: {duration:.3f} s")
-                print("-" * 40)
-                print(new_song)
-                print("="*40 + "\n")
-                i+=1
-                log_file.write(f"--- Iteration {i+1} / {len(diff)} ---\n")
-                log_file.write(f"Style added: {target_dif}\n")
-                log_file.write(f"Author: {st_author}\n")
-                log_file.write(f"Song title: {st_song_title}\n")
-                log_file.write(f"Duration (s): {duration:.3f}\n")
-                log_file.write(f"Cumulative duration (s): {cumulative:.3f}\n")
-                log_file.write("Resulting song:\n")
-                log_file.write(new_song + "\n\n")
-                log_file.flush()
-    def create_full_prompt_without_definition(self,song: str) -> str:
+    def create_full_extraction_prompt_without_definition(self,song: str) -> str:
 
         features_text = "\n".join(
             [f"{feature}" for feature,definition in self.styles.items()]
@@ -232,7 +140,7 @@ class StyleTransferLocal:
         )
         
         return prompt   
-    def create_full_prompt_with_definition(self,song: str) -> str:
+    def create_full_extraction_prompt_with_definition(self,song: str) -> str:
        
         features_text = "\n".join(
             [f"{feature}" for feature,_ in self.styles.items()]
@@ -246,131 +154,6 @@ class StyleTransferLocal:
         )
         
         return prompt      
-    def apply_styles_iterative_(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
-    
-        song = st_song_text
-
-        
-        if log_path is None:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_path = f"song_style_log_{st_song_title or 'song'}_{ts}.txt"
-            log_path = "".join(c for c in log_path if c.isalnum() or c in (' ','.','_','-')).rstrip()
-
-        log_dir = os.path.dirname(log_path)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-
-        cumulative = 0.0
-        total_styles = len(sf_styles)
-        target_features = []
-        target_feature_definitions = []
-        for _, row in sf_styles.iterrows():
-            target_feature = row['style_feature_category']
-            if target_feature not in st_styles['style_feature_category'].values:
-                target_features.append(target_feature)
-                target_feature_definitions.append(self.styles[target_feature])
-            
-        
-        if not target_features:
-            return song
-        i=0
-        with open(log_path, "a", encoding="utf-8") as log_file:
-            for target_feature,target_definition in zip(target_features,target_feature_definitions):
-                
-                
-                example_1="Особина:Сарказам\nОригинално: Денес работев цел ден без пауза.\nСо „Сарказам“: О, прекрасно, токму тоа ми требаше — уште еден ден без одмор!\n"
-                example_2="Особина:Активен глас\nОригинално: Писмото беше испратено од мене.\nСо „Активен глас“: Јас го испратив писмото\n"
-                
-                user_message = (
-                    f"{target_definition}\n Ова ја претставува дефиницијата, не ја давај нејзе, во твојот одговор\n\n"
-                    f"Искористи ја оваа особина {target_feature} ВРЗ песната: .\n"
-                    f"Како одговор врати ја назад песната, но со применет {target_feature} врз нејзе. Оваа е клучно.\n"
-                    f"Следувват два примери:\n"
-                    f'{example_1}'
-                    f'{example_2}'
-                    f"Пасус:\n{song}\n\n Обработена песна:"
-                )
-                
-               
-                new_system={"role": "system","content": 
-                ("[INST]Разговор помеѓу корисник и разговорник  за применување на  стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.[/INST]</s>.")}
-                messages = [new_system, {"role": "user", "content": user_message}]
-
-                payload = {
-                    "model": self.model,
-                    "messages": messages,
-                    "top_p": 0.9,
-                    'early_stopping':True,
-                    "frequency_penalty": 0.2,
-                    "presence_penalty": 0.15,
-                    'stop': ["<|im_end|>"],
-                    "max_tokens":int(1.5*len(song)),
-                }
-                """"output_ids = self.model.generate(input_ids=data_x_input_ids,
-                                                 attention_mask=data_x_attention_mask,
-                                                 max_new_tokens=max_length,
-                                                 eos_token_id=tokenizer.eos_token_id,
-                                                 pad_token_id=tokenizer.pad_token_id,
-                                                 early_stopping=True,
-                                                 num_return_sequences=1,
-                                                 # no_repeat_ngram_size=2,
-                                                 # repetition_penalty=2.0,
-                                                 do_sample=False,
-                                                 # top_p=0.5
-                                                 )"""
-                
-                start_time = time.time()
-                try:
-                    resp = requests.post(
-                        "http://127.0.0.1:8080/v1/chat/completions",
-                        headers={"Content-Type": "application/json"},
-                        json=payload,
-                        timeout=200
-                    )
-                    duration = time.time() - start_time
-
-                    if resp.ok:
-                        data = resp.json()
-                        new_song = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-
-                        if not new_song:
-                            new_song = song
-                            note = f" (empty response — kept previous song text)"
-                        else:
-                            note = ""
-                    else:
-                        new_song = song
-                        note = f" (request failed: status {resp.status_code})"
-
-                except Exception as e:
-                    duration = time.time() - start_time
-                    new_song = song
-                    note = f" (exception during request: {e})"
-
-                cumulative += duration
-                song = new_song
-
-                
-                print("\n" + "="*40)
-                print(f"Iteration {i+1}/{total_styles} - style added: {target_feature}")
-                print(f"Duration: {duration:.3f} s{note}")
-                print("-" * 40)
-                print(song)
-                print("="*40 + "\n")
-                i+=1
-                log_file.write(f"--- Iteration {i+1} / {total_styles} ---\n")
-                log_file.write(f"Style added: {target_feature}\n")
-                log_file.write(f"Author: {st_author}\n")
-                log_file.write(f"Song title: {st_song_title}\n")
-                log_file.write(f"Duration (s): {duration:.3f}\n")
-                log_file.write(f"Cumulative duration (s): {cumulative:.3f}\n")
-                if note:
-                    log_file.write(f"Note: {note}\n")
-                log_file.write("Resulting song:\n")
-                log_file.write(song + "\n\n")
-                log_file.flush()
-
-        return song, log_path
     def create_csv_for_extraction(self,
                                 number_of_songs=10,
                                 styles_path='api_styles_all_in_one_text.csv',
@@ -399,7 +182,7 @@ class StyleTransferLocal:
 
         new_rows = []
         for author in unique_authors:
-            songs_for_author = self.extract_n_random_styles_for_author(author, number_of_songs)
+            songs_for_author = self.extract_n_random_songs_with_styles_for_author(author, number_of_songs)
             
             for _, song_info in songs_for_author.iterrows():
                 row = {
@@ -419,9 +202,6 @@ class StyleTransferLocal:
 
         updated_df.to_csv(results_path, index=False)
         print(f"✅ CSV updated/created at: {results_path}")  
-    
-    
-
     def create_prompt_template(self, author, all_author_words, example_song, num_words=10, styles=None):
         styles = [s.strip() for s in (styles or []) if isinstance(s, str) and s.strip()]
 
@@ -469,8 +249,7 @@ class StyleTransferLocal:
             prompt_parts.append(str(example_song).strip())
 
         prompt = "\n".join(prompt_parts)
-        return prompt, "\n".join(styles)
-    
+        return prompt, "\n".join(styles) 
     def fill_csv(
         self,
         styles_from='all_styles_to_create.csv',
@@ -611,8 +390,6 @@ class StyleTransferLocal:
         print(f"✅ Already processed (skipped): {len(processed_songs)}")
         print(f"✅ Newly processed this run: {total_songs - len(processed_songs)}")
         print(f"🕒 Total runtime: {total_elapsed/60:.2f} minutes\n")
-    
-    
     def write_to_csv(self, author, song_title, styles_to_apply, result, output_path='author_songs_created_only_with_styles.csv'):
         text = result['output']['message']['content'][0]['text']
 
@@ -664,8 +441,6 @@ class StyleTransferLocal:
             result[key_clean] = present_value
 
         return result
-
-
     def analyze_author_text(
     self,
     min_df=3,
@@ -800,7 +575,6 @@ class StyleTransferLocal:
             }
         )
         return response
-
     def create_csv_with_perplexity(self,input_csv,column):
         
         df_input = pd.read_csv(input_csv)
@@ -875,5 +649,6 @@ class StyleTransferLocal:
         
         return output_csv
 
+st=StyleTransfer()
     
 

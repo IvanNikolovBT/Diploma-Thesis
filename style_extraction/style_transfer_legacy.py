@@ -17,17 +17,17 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-class StyleTransferLocal:
+class StyleTransferLegacy:
     
     def __init__(self,model="trajkovnikola/MKLLM-7B-Instruct"):
 
-        self.system={"role": "system","content": 
+        self.legacy_system={"role": "system","content": 
             ("[INST]Разговор помеѓу корисник и разговорник за екстракција на стил македонска поезија. Асистентот дава корисни, детални и љубезни одговори на прашањата на корисникот.Ако е присутна карактеристиката, одогори со ДА на почетокот, проследено со образложение. Ако не е присутна, одговори само со НЕ и ништо друго.[/INST]</s>.")}        
         self.db=PoetryDB()
         self.CSV_PATH="classification/cleaned_songs.csv"
         self.df=pd.read_csv(self.CSV_PATH)
         self.random_seed=47
-        self.styles_path='style_extraction/vezilka_test.cvs'
+        self.legacy_styles_path='style_extraction/vezilka_test.cvs'
         self.model=model
         self.styles=self.load_styles()
         self.client = boto3.client("bedrock-runtime",region_name="eu-central-1",)
@@ -44,7 +44,7 @@ class StyleTransferLocal:
             n=min(number_of_songs, len(author_songs)),
             random_state=None  
         )
-    def extract_n_random_styles_for_author(self, author_name='Блаже Конески', number_of_songs=10):
+    def extract_n_random_songs_with_styles_for_author(self, author_name='Блаже Конески', number_of_songs=10):
         styles=pd.read_csv('api_styles_all_in_one_text.csv')
         author_songs = styles[styles['author'] == author_name]
         return author_songs.sample(
@@ -89,7 +89,7 @@ class StyleTransferLocal:
             "Биди многу строг при својата одлука, ако си сигурен дека е присутна карактеристиката, тогаш запиши одогори со да."
             f"Пасус:\n{song}\n\nОпис:"
         )
-        messages = [self.system,{"role": "user", "content": user_message_vezilka}]
+        messages = [self.legacy_system,{"role": "user", "content": user_message_vezilka}]
 
         payload_mk_llm = {
         "model": self.model,
@@ -247,13 +247,13 @@ class StyleTransferLocal:
         self.legacy_extract_style_from_song(songs)
 
     def get_present_styles_for_song(self, title, author):
-        self.df = pd.read_csv(self.styles_path)
+        self.df = pd.read_csv(self.legacy_styles_path)
         pattern = r'^Да' 
         return self.df[
             (self.df['author']== author) & (self.df['song']==title) &
             (self.df['extracted_text'].str.match(pattern, na=False))
         ]
-    def apply_styles_iterative(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
+    def legacy_apply_styles_iterative(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
         if log_path is None:
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             log_path = f"song_style_log_{st_song_title or 'song'}_{ts}.txt"
@@ -350,7 +350,7 @@ class StyleTransferLocal:
         )
         
         return prompt      
-    def apply_styles_iterative_(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
+    def legacy_apply_styles_iterative_(self, sf_styles, st_song_text, st_song_title, st_author,st_styles, log_path=None):
     
         song = st_song_text
 
@@ -657,7 +657,7 @@ class StyleTransferLocal:
 
         new_rows = []
         for author in unique_authors:
-            songs_for_author = self.extract_n_random_styles_for_author(author, number_of_songs)
+            songs_for_author = self.extract_n_random_songs_with_styles_for_author(author, number_of_songs)
             
             for _, song_info in songs_for_author.iterrows():
                 row = {
