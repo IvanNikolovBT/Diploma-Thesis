@@ -15,6 +15,8 @@ import re
 from collections import Counter
 from sklearn.feature_extraction.text import TfidfVectorizer
 import traceback
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 class StyleTransferLocal:
     
     def __init__(self,model="trajkovnikola/MKLLM-7B-Instruct"):
@@ -749,36 +751,36 @@ class StyleTransferLocal:
         if styles is None:
             styles = []
 
-        # Clean styles
+        
         styles = [s.strip() for s in styles if isinstance(s, str) and s.strip()]
 
-        # Get top expressive words
+        
         most_common_words = all_author_words['expressive_words'][author]
         top_words = [word for word, _ in most_common_words[:num_words]]
 
-        # Format styles and words
+        
         styles_string = "\n".join(f"- {key}" for key in styles) if styles else "- (нема избрани стилови)"
         words_string = ", ".join(top_words)
 
-        # --- ✅ Extract the actual song text ---
+        
         if isinstance(example_song, pd.DataFrame):
             if 'song_text' in example_song.columns:
-                # Concatenate all song_text rows into one string
+                
                 example_text = "\n".join(example_song['song_text'].astype(str).tolist())
             else:
                 raise KeyError("DataFrame does not contain a 'song_text' column.")
         elif isinstance(example_song, dict) and 'song_text' in example_song:
-            # Handle dict containing a Series or list
+            
             song_texts = example_song['song_text']
             if hasattr(song_texts, "tolist"):
                 example_text = "\n".join(map(str, song_texts.tolist()))
             else:
                 example_text = str(song_texts)
         else:
-            # Fallback if user passes a string directly
+            
             example_text = str(example_song)
 
-        # --- Build final prompt ---
+        
         prompt = (
             "Стилски фигури што треба да се искористат:\n"
             f"{styles_string}\n\n"
@@ -793,7 +795,6 @@ class StyleTransferLocal:
             f"{example_text.strip()}"
         )
 
-        print(prompt)
         return prompt, "\n".join(styles)
     def fill_csv_using_only_styles(self):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
@@ -1004,8 +1005,7 @@ class StyleTransferLocal:
                     if model == 'nova':
                         result = self.invoke_nova_micro(prompt, system)
                     elif model == 'claude':
-                        #result = self.invoke_claude_model(prompt, system)
-                        pass
+                        result = self.invoke_claude_model(prompt, system)
                     if not result or 'output' not in result or 'message' not in result['output']:
                         raise ValueError("Invalid API response")
 
@@ -1238,9 +1238,74 @@ class StyleTransferLocal:
             }
         )
         return response
+    def perplexity_multilingual(text, model_name="ai-forever/mGPT"):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,      
+            low_cpu_mem_usage=True,         
+            device_map="auto"               
+        )
+        model.eval()
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
+        with torch.no_grad():
+            outputs = model(**inputs, labels=inputs["input_ids"])
+            loss = outputs.loss
+        return torch.exp(loss).item()
+
+    def create_csv_with_perplexity(self,input_csv):
+        
+        df_input = pd.read_csv(input_csv)
+        
+        
+        df_output = df_input.copy()
+        
+        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_name = "ai-forever/mGPT"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,      
+            low_cpu_mem_usage=True,         
+            device_map="auto"               
+        )
+        model.eval()
+        
+        
+        df_output['perplexity'] = float('nan')  
+        for idx, row in df_output.iterrows():
+            text = row['new_song']
+            if pd.notna(text) and isinstance(text, str) and text.strip():
+                try:
+                    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
+                    with torch.no_grad():
+                        outputs = model(**inputs, labels=inputs["input_ids"])
+                        loss = outputs.loss
+                    df_output.at[idx, 'perplexity'] = torch.exp(loss).item()
+                except Exception as e:
+                    print(f"Error calculating perplexity for row {idx}: {e}")
+                    df_output.at[idx, 'perplexity'] = float('nan')
+            else:
+                print(f"Skipping row {idx}: Invalid or empty text")
+        
+        
+        output_csv = f"{input_csv.rsplit('.', 1)[0]}_with_perplexity.csv"
+        
+        
+        df_output.to_csv(output_csv, index=False)
+        print(f"Output saved to {output_csv}")
+        
+        
+        if 'perplexity' not in df_input.columns:
+            print("Original DataFrame unchanged (immutable).")
+        else:
+            print("Warning: Original DataFrame was modified unexpectedly.")
+        
+        return output_csv
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
 total_start=time.time()
-st.fill_csv_using__styles_idf_example_song_to_emiluate(styles_from='all_styles_to_create.csv',model='claude',output_path='all_styles_idf_claude_example.csv')
-print(f'Time in the end {time.time()-total_start} s')
+st.create_csv_with_perplexity()
 #(1741+ 255 * 9)/60=67 минути  klod. 
 #Best hyperparameters: {'max_features': 4619, 'n_layers': 1, 'neurons': 567, 'activation': 'tanh', 'dropout_rate': 0.3406819279083615, 'optimizer': 'rmsprop', 'lr': 0.0007878787378953067, 'l2_reg': 3.145848564707723e-05, 'n_epochs': 41, 'min_df': 3, 'max_df': 0.8904674508605334, 'ngram_range': '1-1'}
