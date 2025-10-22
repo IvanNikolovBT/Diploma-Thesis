@@ -202,7 +202,7 @@ class StyleTransfer:
 
         updated_df.to_csv(results_path, index=False)
         print(f"✅ CSV updated/created at: {results_path}")  
-    def create_prompt_template(self, author, all_author_words, example_song, num_words=10, styles=None):
+    def create_prompt_template(self, author, all_author_words, example_song='', num_words=10, styles=None):
         styles = [s.strip() for s in (styles or []) if isinstance(s, str) and s.strip()]
 
         
@@ -250,18 +250,20 @@ class StyleTransfer:
 
         prompt = "\n".join(prompt_parts)
         return prompt, "\n".join(styles) 
-    def fill_csv(
-        self,
-        styles_from='all_styles_to_create.csv',
-        model='claude',
-        output_path='author_songs_created_using_styles_idf_stop_words_removed_example_song.csv'
-    ,mode=1):
-        
-
+    def fill_csv(self, styles_from='all_styles_to_create.csv', model='claude', mode=1):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
         songs_to_apply = pd.read_csv(styles_from)
-
         
+        mode_to_suffix = {
+            1: 'idf_styles_examples.csv',
+            2: 'idf_styles.csv',
+            3: 'idf.csv',
+            4: 'styles.csv',
+            5: 'raw_author.csv'
+        }
+        suffix = mode_to_suffix.get(mode, 'output.csv')
+        output_path = f'all_songs_{mode}_{model}_{suffix}'
+
         processed_songs = set()
         if os.path.exists(output_path):
             try:
@@ -287,7 +289,6 @@ class StyleTransfer:
             song_title = str(row['name_of_sample_song'])
             author = str(row['author'])
 
-            
             if (author, song_title) in processed_songs:
                 print(f"[{idx+1}/{total_songs}] ⏩ Skipping already processed '{song_title}' by '{author}'")
                 continue
@@ -296,45 +297,51 @@ class StyleTransfer:
 
             extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
             styles_to_apply = list(extracted_styles.keys())
-            if mode==1:  
-                print(f'Mode {mode}: model {model} idf + styles + example 1200')  
+
+            if mode == 1:
+                print(f'Mode {mode}: model {model} idf + styles + example 1200')
                 example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
                 example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
-                
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=all_author_words,
                     styles=styles_to_apply,
                     example_song=example_song_text
                 )
-            elif mode==2:
-                print(f'Mode {mode}: model {model} idf + styles 1200') 
+
+            elif mode == 2:
+                print(f'Mode {mode}: model {model} idf + styles 1200')
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=all_author_words,
-                    styles=styles_to_apply
+                    styles=styles_to_apply,
                 )
-            elif mode==3:
-                print(f'Mode {mode}: model {model} idf 1200') 
+                
+
+            elif mode == 3:
+                print(f'Mode {mode}: model {model} idf 1200')
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=all_author_words,
                     styles=[]
                 )
-            elif mode==4:
-                print(f'Mode {mode}: model {model} styles 1200') 
+                #print(f'TEST {prompt}')
+            elif mode == 4:
+                print(f'Mode {mode}: model {model} styles 1200')
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=[],
                     styles=styles_to_apply
                 )
-            elif mode==5:
-                print(f'Mode {mode}: model {model} testing author model knowledge 1200') 
+
+            elif mode == 5:
+                print(f'Mode {mode}: model {model} testing author model knowledge 1200')
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=[],
                     styles=[]
                 )
+        
             success = False
             retries = 0
             max_retries = 3
@@ -350,7 +357,6 @@ class StyleTransfer:
                     if not result or 'output' not in result or 'message' not in result['output']:
                         raise ValueError("Invalid API response")
 
-                    
                     self.write_to_csv(
                         author, song_title, styles_string, result,
                         output_path=output_path
@@ -383,13 +389,13 @@ class StyleTransfer:
             if not success:
                 print(f"[{idx+1}/{total_songs}] ❌ Skipping '{song_title}' after {max_retries} failed attempts.")
 
-        
         total_elapsed = time.time() - start_time
         print("\n🏁 All songs processed!")
         print(f"✅ Total songs in list: {total_songs}")
         print(f"✅ Already processed (skipped): {len(processed_songs)}")
         print(f"✅ Newly processed this run: {total_songs - len(processed_songs)}")
         print(f"🕒 Total runtime: {total_elapsed/60:.2f} minutes\n")
+
     def write_to_csv(self, author, song_title, styles_to_apply, result, output_path='author_songs_created_only_with_styles.csv'):
         text = result['output']['message']['content'][0]['text']
 
@@ -650,5 +656,6 @@ class StyleTransfer:
         return output_csv
 
 st=StyleTransfer()
+st.fill_csv(model='claude',mode=3)
     
 
