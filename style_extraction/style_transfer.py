@@ -700,101 +700,55 @@ class StyleTransferLocal:
         updated_df.to_csv(results_path, index=False)
         print(f"✅ CSV updated/created at: {results_path}")  
     
-    def create_only_styles_prompt(self,*key_lists):
-  
-        all_keys = set()
-        for keys in key_lists:
-            all_keys.update(keys)
-
-        sorted_keys = sorted(all_keys)
-        styles_string="".join(f"- {key}" for key in sorted_keys)
-        prompt = "Стилски фигури што треба да се искористат:\n"
-        prompt += "\n".join(f"- {key}" for key in sorted_keys)
-        prompt+="\nИзгенерирај македонска поезија користејќи ги горе наведените насоки на значење.  Песната мора да има наслов. Насловот запиши го во следниот формат "
-        prompt+="<НАСЛОВ>Тука вметни го насловот </НАСЛОВ> . Песната генерирај ја во раммките на <ПЕСНА>Тука вметни ја песната </ПЕСНА>."
-        prompt+="Не ги користи имињата на самите насоки на значење.Биди креативен! Да нема премногу рима, затоа што тоа наликува на песна генерирана од модел. Користи нерегуларни зборови."
-        return prompt,styles_string
     
-    def create_idf_styles_prompt(self, author, all_author_words, num_words=10, styles=None):
-        if styles is None:
-            styles = []
+
+    def create_prompt_template(self, author, all_author_words, example_song, num_words=10, styles=None):
+        styles = [s.strip() for s in (styles or []) if isinstance(s, str) and s.strip()]
 
         
-        styles = [s.strip() for s in styles if isinstance(s, str) and s.strip()]
+        most_common_words = []
+        if all_author_words and 'expressive_words' in all_author_words and author in all_author_words['expressive_words']:
+            most_common_words = all_author_words['expressive_words'][author]
 
-        
-        most_common_words = all_author_words['expressive_words'][author]
         top_words = [word for word, _ in most_common_words[:num_words]]
-
-       
-        styles_string = "\n".join(f"- {key}" for key in styles)
         words_string = ", ".join(top_words)
+        styles_string = "\n".join(f"- {s}" for s in styles)
+
+        prompt_parts = []
 
         
-        prompt = "Стилски фигури што треба да се искористат:\n"
-        prompt += styles_string if styles_string else "- (нема избрани стилови)"
-        prompt += "\n\nНајчести зборови кои треба да се искористат во песната:\n"
-        prompt += words_string
-        prompt += (
-            "\n\nИзгенерирај македонска поезија користејќи ги горенаведените стилски фигури и зборови. "
+        if styles:
+            prompt_parts.append("Насоки на значење што треба да се искористат:")
+            prompt_parts.append(styles_string)
+
+        
+        if most_common_words:
+            prompt_parts.append("Најизразити зборови кои треба да се искористат во песната:")
+            prompt_parts.append(words_string)
+
+        if not(styles) and  not(most_common_words):
+            prompt_parts.append(
+            f"\n\nИзгенерирај македонска поезија, во стилот на {author} користејќи ги горенаведените насоки. "
+            "Песната мора да има наслов. Насловот запиши го во следниот формат: "
+            "<НАСЛОВ>Тука вметни го насловот</НАСЛОВ>. "
+            "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
+            "Не ги користи имињата на самите насоки на значење. Биди креативен!"
+        )
+            prompt = "\n".join(prompt_parts)
+        prompt_parts.append(
+            "\n\nИзгенерирај македонска поезија користејќи ги горенаведените насоки. "
             "Песната мора да има наслов. Насловот запиши го во следниот формат: "
             "<НАСЛОВ>Тука вметни го насловот</НАСЛОВ>. "
             "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
             "Не ги користи имињата на самите насоки на значење. Биди креативен!"
         )
 
-        return prompt, "\n".join(styles)
-    
-    def create_idf_styles_example_prompt(self, author, all_author_words, example_song, num_words=10, styles=None):
         
+        if example_song:
+            prompt_parts.append(f"\n\nПример песна од авторот {author}:")
+            prompt_parts.append(str(example_song).strip())
 
-        if styles is None:
-            styles = []
-
-        
-        styles = [s.strip() for s in styles if isinstance(s, str) and s.strip()]
-
-        
-        most_common_words = all_author_words['expressive_words'][author]
-        top_words = [word for word, _ in most_common_words[:num_words]]
-
-        
-        styles_string = "\n".join(f"- {key}" for key in styles) if styles else "- (нема избрани стилови)"
-        words_string = ", ".join(top_words)
-
-        
-        if isinstance(example_song, pd.DataFrame):
-            if 'song_text' in example_song.columns:
-                
-                example_text = "\n".join(example_song['song_text'].astype(str).tolist())
-            else:
-                raise KeyError("DataFrame does not contain a 'song_text' column.")
-        elif isinstance(example_song, dict) and 'song_text' in example_song:
-            
-            song_texts = example_song['song_text']
-            if hasattr(song_texts, "tolist"):
-                example_text = "\n".join(map(str, song_texts.tolist()))
-            else:
-                example_text = str(song_texts)
-        else:
-            
-            example_text = str(example_song)
-
-        
-        prompt = (
-            "Стилски фигури што треба да се искористат:\n"
-            f"{styles_string}\n\n"
-            "Најчести зборови кои треба да се искористат во песната:\n"
-            f"{words_string}\n\n"
-            "Изгенерирај македонска поезија користејќи ги горенаведените стилски фигури и зборови. "
-            "Песната мора да има наслов. Насловот запиши го во следниот формат: "
-            "<НАСЛОВ>Тука вметни го насловот</НАСЛОВ>. "
-            "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
-            "Не ги користи имињата на самите насоки на значење. Биди креативен!\n\n"
-            "Пример песна од авторот:\n"
-            f"{example_text.strip()}"
-        )
-
+        prompt = "\n".join(prompt_parts)
         return prompt, "\n".join(styles)
     def fill_csv_using_only_styles(self,input_path,model='claude'):
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
@@ -809,7 +763,7 @@ class StyleTransferLocal:
             try:
                 extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
                 styles_to_apply = extracted_styles.keys()
-                prompt,styles_string = self.create_only_styles_prompt(styles_to_apply)
+                prompt,styles_string = self.create_prompt_template(styles_to_apply)
                 if model=='claude':
                     result = self.invoke_claude_model(prompt=prompt, system=system)
                 elif model=='micro':
@@ -820,7 +774,7 @@ class StyleTransferLocal:
                     print(f"[{idx+1}/{total_songs}] Warning: No valid reply from API for song '{row['name_of_sample_song']}' by '{row['author']}'")
                     continue
                 
-                self.write_to_csv_only_styles(
+                self.write_to_csv(
                     row['author'],
                     row['name_of_sample_song'],
                     styles_string,
@@ -833,122 +787,13 @@ class StyleTransferLocal:
             
             except Exception as e:
                 print(f"[{idx+1}/{total_songs}] Error processing '{row['name_of_sample_song']}' by '{row['author']}': {e}")
-   
-    def fill_csv_using__styles_idf(
-        self,
-        styles_from='author_songs_to_create_only_with_styles.csv',
-        model='claude',
-        output_path='author_songs_created_using_styles_idf_stop_words_removed.csv'
-    ):
-        
-
-        system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
-        songs_to_apply = pd.read_csv(styles_from)
-
-        
-        processed_songs = set()
-        if os.path.exists(output_path):
-            try:
-                existing = pd.read_csv(output_path)
-                if {'author', 'song_title'}.issubset(existing.columns):
-                    processed_songs = set(
-                        zip(existing['author'].astype(str), existing['song_title'].astype(str))
-                    )
-                    print(f"🔁 Found existing output file with {len(processed_songs)} processed songs. Resuming from last unprocessed one...")
-                else:
-                    print("⚠️ Output file found but missing expected columns. Starting from scratch.")
-            except Exception as e:
-                print(f"⚠️ Could not read existing output file: {e}")
-        else:
-            print("📄 No existing output file found. Starting fresh.")
-
-        start_time = time.time()
-        total_time = 0
-        total_songs = len(songs_to_apply)
-        all_author_words = self.analyze_author_text()
-
-        for idx, row in songs_to_apply.iterrows():
-            song_title = str(row['name_of_sample_song'])
-            author = str(row['author'])
-
-            # ✅ STEP 2: Skip if already processed
-            if (author, song_title) in processed_songs:
-                print(f"[{idx+1}/{total_songs}] ⏩ Skipping already processed '{song_title}' by '{author}'")
-                continue
-
-            print(f"[{idx+1}/{total_songs}] Processing '{song_title}' by '{author}'")
-
-            extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
-            styles_to_apply = list(extracted_styles.keys())
-            prompt, styles_string = self.create_idf_styles_prompt(
-                author=author,
-                all_author_words=all_author_words,
-                styles=styles_to_apply
-            )
-
-            success = False
-            retries = 0
-            max_retries = 3
-
-            while not success and retries < max_retries:
-                try:
-                    start = time.time()
-
-                    if model == 'nova':
-                        result = self.invoke_nova_micro(prompt, system)
-                    elif model == 'claude':
-                        result = self.invoke_claude_model(prompt, system)
-
-                    if not result or 'output' not in result or 'message' not in result['output']:
-                        raise ValueError("Invalid API response")
-
-                    # ✅ Write to CSV immediately after success
-                    self.write_to_csv_only_styles(
-                        author, song_title, styles_string, result,
-                        output_path=output_path
-                    )
-
-                    elapsed = time.time() - start
-                    total_time += elapsed
-                    print(f"[{idx+1}/{total_songs}] ✅ Processed '{song_title}' - {elapsed:.2f}s (Total {total_time:.2f}s)")
-
-                    wait_time = random.uniform(5, 10)
-                    print(f"Waiting {wait_time:.2f}s before next song...")
-                    time.sleep(wait_time)
-
-                    success = True
-
-                except Exception as e:
-                    retries += 1
-                    print(f"[{idx+1}/{total_songs}] ⚠️ Error processing '{song_title}': {e}")
-                    traceback.print_exc()
-
-                    if "ThrottlingException" in str(e):
-                        wait_time = random.uniform(20, 40)
-                        print(f"Throttled! Waiting {wait_time:.2f}s before retrying...")
-                    else:
-                        wait_time = random.uniform(10, 20)
-                        print(f"Retrying after {wait_time:.2f}s...")
-
-                    time.sleep(wait_time)
-
-            if not success:
-                print(f"[{idx+1}/{total_songs}] ❌ Skipping '{song_title}' after {max_retries} failed attempts.")
-
-        # ✅ Final summary message
-        total_elapsed = time.time() - start_time
-        print("\n🏁 All songs processed!")
-        print(f"✅ Total songs in list: {total_songs}")
-        print(f"✅ Already processed (skipped): {len(processed_songs)}")
-        print(f"✅ Newly processed this run: {total_songs - len(processed_songs)}")
-        print(f"🕒 Total runtime: {total_elapsed/60:.2f} minutes\n")
-    
-    def fill_csv_using__styles_idf_example_song_to_emiluate(
+      
+    def fill_csv(
         self,
         styles_from='all_styles_to_create.csv',
         model='claude',
         output_path='author_songs_created_using_styles_idf_stop_words_removed_example_song.csv'
-    ):
+    ,mode=1):
         
 
         system = 'Ти си Македонски разговорник наменет за генерирање на македонска поезија.'
@@ -989,14 +834,45 @@ class StyleTransferLocal:
 
             extracted_styles = self.extract_style_pairs(row['styles'], only_present=True)
             styles_to_apply = list(extracted_styles.keys())
-            example_song=self.extract_n_random_songs_for_author(row['author'],number_of_songs=1)
-            prompt, styles_string = self.create_idf_styles_example_prompt(
-                author=author,
-                all_author_words=all_author_words,
-                styles=styles_to_apply,
-                example_song=example_song
-            )
-
+            if mode==1:  
+                print(f'Mode {mode}: model {model} idf + styles + example 1200')  
+                example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
+                example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
+                
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=all_author_words,
+                    styles=styles_to_apply,
+                    example_song=example_song_text
+                )
+            elif mode==2:
+                print(f'Mode {mode}: model {model} idf + styles 1200') 
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=all_author_words,
+                    styles=styles_to_apply
+                )
+            elif mode==3:
+                print(f'Mode {mode}: model {model} idf 1200') 
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=all_author_words,
+                    styles=[]
+                )
+            elif mode==4:
+                print(f'Mode {mode}: model {model} styles 1200') 
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=[],
+                    styles=styles_to_apply
+                )
+            elif mode==5:
+                print(f'Mode {mode}: model {model} testing author model knowledge 1200') 
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=[],
+                    styles=[]
+                )
             success = False
             retries = 0
             max_retries = 3
@@ -1013,7 +889,7 @@ class StyleTransferLocal:
                         raise ValueError("Invalid API response")
 
                     
-                    self.write_to_csv_only_styles(
+                    self.write_to_csv(
                         author, song_title, styles_string, result,
                         output_path=output_path
                     )
@@ -1054,7 +930,7 @@ class StyleTransferLocal:
         print(f"🕒 Total runtime: {total_elapsed/60:.2f} minutes\n")
     
     
-    def write_to_csv_only_styles(self, author, song_title, styles_to_apply, result, output_path='author_songs_created_only_with_styles.csv'):
+    def write_to_csv(self, author, song_title, styles_to_apply, result, output_path='author_songs_created_only_with_styles.csv'):
         text = result['output']['message']['content'][0]['text']
 
         input_tokens = result['usage']['inputTokens']
@@ -1207,8 +1083,8 @@ class StyleTransferLocal:
                 return
 
             
-            # Create the final prompt
-            prompt, styles_string = self.create_idf_styles_prompt(
+            
+            prompt, styles_string = self.create_prompt_template(
                 author=author,
                 all_author_words=all_author_words,
                 styles=available_styles
@@ -1315,8 +1191,10 @@ class StyleTransferLocal:
             print("Warning: Original DataFrame was modified unexpectedly.")
         
         return output_csv
+
+    
 st = StyleTransferLocal(model="http://127.0.0.1:8080/v1/chat/completions")
-st.fill_csv_using_only_styles()
+st.fill_csv_using_only_styles(input_path='author_songs_to_create_only_with_styles.csv')
 #column='song_text'
 #st.create_csv_with_perplexity('classification/cleaned_songs.csv',column)
 
