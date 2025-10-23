@@ -325,7 +325,7 @@ class StyleTransfer:
                     all_author_words=all_author_words,
                     styles=[]
                 )
-                #print(f'TEST {prompt}')
+                
             elif mode == 4:
                 print(f'Mode {mode}: model {model} styles 1200')
                 
@@ -334,7 +334,7 @@ class StyleTransfer:
                     all_author_words=[],
                     styles=styles_to_apply
                 )
-                
+               
             elif mode == 5:
                 print(f'Mode {mode}: model {model} testing author model knowledge 1200')
                 prompt, styles_string = self.create_prompt_template(
@@ -342,7 +342,7 @@ class StyleTransfer:
                     all_author_words=[],
                     styles=[]
                 )
-        
+                 #print(f'TEST {prompt}')
             success = False
             retries = 0
             max_retries = 3
@@ -667,6 +667,6 @@ now = datetime.now()
 print("Current date and time:", now)
 
 #1:24 - 6.22
-#7:06
+#7:06-10:50
     
 
