@@ -609,6 +609,7 @@ class StyleTransfer:
         )
         model.eval()
         
+        print(f'device DEVICE {device}')
         
         if not os.path.exists(output_csv):
             df_output.to_csv(output_csv, index=False)
@@ -660,13 +661,15 @@ st=StyleTransfer()
 from datetime import datetime
 now = datetime.now()
 print("Current date and time:", now)
+#st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 
-st.fill_csv(model='claude',mode=4)
-from datetime import datetime
+#st.create_csv_with_perplexity('all_songs_4_claude_styles.csv',column='new_song')
+st.fill_csv(model='claude',mode=5)
 now = datetime.now()
 print("Current date and time:", now)
-
-#1:24 - 6.22
-#7:06-10:50 16:25 -18 : 54
+#3 1:24 - 6.22
+#4 7:06-10:50 16:25 -18 : 54
+#5 20:22
+  
     
 
