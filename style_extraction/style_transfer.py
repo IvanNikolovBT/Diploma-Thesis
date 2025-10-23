@@ -328,12 +328,13 @@ class StyleTransfer:
                 #print(f'TEST {prompt}')
             elif mode == 4:
                 print(f'Mode {mode}: model {model} styles 1200')
+                
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=[],
                     styles=styles_to_apply
                 )
-
+                
             elif mode == 5:
                 print(f'Mode {mode}: model {model} testing author model knowledge 1200')
                 prompt, styles_string = self.create_prompt_template(
@@ -656,6 +657,16 @@ class StyleTransfer:
         return output_csv
 
 st=StyleTransfer()
-st.fill_csv(model='claude',mode=3)
+from datetime import datetime
+now = datetime.now()
+print("Current date and time:", now)
+
+st.fill_csv(model='claude',mode=4)
+from datetime import datetime
+now = datetime.now()
+print("Current date and time:", now)
+
+#1:24 - 6.22
+#7:06
     
 
