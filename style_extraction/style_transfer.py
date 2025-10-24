@@ -663,8 +663,8 @@ now = datetime.now()
 print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 
-#st.create_csv_with_perplexity('all_songs_4_claude_styles.csv',column='new_song')
-st.fill_csv(model='claude',mode=5)
+st.create_csv_with_perplexity('all_songs_5_claude_raw_author.csv',column='new_song')
+#st.fill_csv(model='claude',mode=5)
 now = datetime.now()
 print("Current date and time:", now)
 #3 1:24 - 6.22
