@@ -796,11 +796,11 @@ class StyleTransfer:
             print("No CSV files with 'perplexity' found.")
             return
         
-        # Define colors for different files
-        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
         
-        # Define bin edges: 0-5, 5-10, ..., 125-130
-        bin_edges = np.arange(0, 131, 5)  # Creates [0, 5, 10, ..., 130]
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  
+        
+        
+        bin_edges = np.arange(0, 131, 5)  
         
         plt.figure(figsize=(10, 6))
         
@@ -813,16 +813,16 @@ class StyleTransfer:
                 print(f"Skipping {file} — no 'perplexity' column found.")
                 continue
             
-            # Get perplexity data
+            
             data = df[perplexity_col].dropna()
             if len(data) == 0:
                 continue
             
-            # Plot histogram
+            
             plt.hist(data, bins=bin_edges, edgecolor='black', alpha=0.3, 
                     label=f"{os.path.basename(file)} (hist)", color=color, density=True)
             
-            # Plot KDE
+            
             sns.kdeplot(data=data, color=color, label=f"{os.path.basename(file)} (KDE)", linewidth=2)
         
         if not plt.gca().has_data():
@@ -844,8 +844,8 @@ class StyleTransfer:
             print("No CSV files with 'perplexity' found.")
             return
         
-        # Define colors for different files
-        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
+        
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  
         
         plt.figure(figsize=(10, 6))
         
@@ -858,12 +858,12 @@ class StyleTransfer:
                 print(f"Skipping {file} — no 'perplexity' column found.")
                 continue
             
-            # Get perplexity data
+            
             data = df[perplexity_col].dropna()
             if len(data) == 0:
                 continue
             
-            # Plot KDE
+            
             sns.kdeplot(data=data, color=color, label=os.path.basename(file), linewidth=2, clip=(0, 130))
         
         if not plt.gca().has_data():
@@ -880,9 +880,9 @@ from datetime import datetime
 now = datetime.now()
 print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
-st.plot_perplexity_kde_only()
+#st.plot_perplexity_kde_only()
 #st.create_csv_with_perplexity('all_songs_5_nova_raw_author.csv',column='new_song')
-#st.fill_csv(model='nova',mode=5)
+st.fill_csv(model='nova',mode=4)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
@@ -891,6 +891,6 @@ print("Current date and time:", now)
 
 # nova micro 
 #5 14:39     19:59
-  
+#4 20:51   
     
 
