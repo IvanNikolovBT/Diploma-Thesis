@@ -15,6 +15,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+import glob
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 class StyleTransfer:
     
     def __init__(self):
@@ -656,20 +660,237 @@ class StyleTransfer:
             print("Warning: Original DataFrame was modified unexpectedly.")
         
         return output_csv
+    
+    def plot_perplexity_histogram_n_bins(self,bins=13):
+        folder_path = "final_results_csv"
+        
+        csv_files = glob.glob(os.path.join(folder_path, "*perplexity*.csv"))
 
+        if not csv_files:
+            print("No CSV files with 'perplexity' found.")
+            return
+        
+        # Define colors for different files
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
+        
+        plt.figure(figsize=(10, 6))
+        
+        for file, color in zip(csv_files, colors):
+            df = pd.read_csv(file)
+            
+            perplexity_col = next((col for col in df.columns if 'perplexity' in col.lower()), None)
+            
+            if perplexity_col is None:
+                print(f"Skipping {file} — no 'perplexity' column found.")
+                continue
+            
+            # Plot histogram for this file with 13 bins
+            plt.hist(df[perplexity_col].dropna(), bins=bins, edgecolor='black', alpha=0.5, 
+                    label=os.path.basename(file), color=color)
+        
+        if not plt.gca().has_data():
+            print("No valid perplexity data found.")
+            return
+        
+        plt.title("Perplexity Distribution Across CSV Files (13 Bins)")
+        plt.xlabel("Perplexity")
+        plt.ylabel("Frequency")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+    def do_not_use_plot_perplexity_histogram_auto_bins(self):
+        folder_path = "final_results_csv"
+        
+        csv_files = glob.glob(os.path.join(folder_path, "*perplexity*.csv"))
+
+        if not csv_files:
+            print("No CSV files with 'perplexity' found.")
+            return
+        
+        
+        all_perplexities = []
+        for file in csv_files:
+            df = pd.read_csv(file)
+            
+            perplexity_col = next((col for col in df.columns if 'perplexity' in col.lower()), None)
+            
+            if perplexity_col is None:
+                print(f"Skipping {file} — no 'perplexity' column found.")
+                continue
+            
+            all_perplexities.extend(df[perplexity_col].dropna().values)
+        
+        if not all_perplexities:
+            print("No valid perplexity data found.")
+            return
+        
+        
+        data = np.array(all_perplexities)
+        iqr = np.percentile(data, 75) - np.percentile(data, 25)  
+        n = len(data)
+        bin_width = 2 * iqr / (n ** (1/3))  
+        if bin_width == 0: 
+            print("Data has no variability; using default bins.")
+            num_bins = 10
+        else:
+            data_range = np.max(data) - np.min(data)
+            num_bins = int(np.ceil(data_range / bin_width))  
+            num_bins = max(5, min(num_bins, 100)) 
+        
+        # Plot histogram
+        plt.figure(figsize=(10, 6))
+        plt.hist(all_perplexities, bins=num_bins, edgecolor='black', alpha=0.7, label='Perplexity Values')
+        
+        plt.title(f"Histogram of Perplexity Values (Auto Bins: {num_bins})")
+        plt.xlabel("Perplexity Range")
+        plt.ylabel("Frequency")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+    def plot_perplexity_histogram_fixed_bins(self):
+        folder_path = "final_results_csv"
+        
+        csv_files = glob.glob(os.path.join(folder_path, "*perplexity*.csv"))
+
+        if not csv_files:
+            print("No CSV files with 'perplexity' found.")
+            return
+        
+        # Define colors for different files
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
+        
+        # Define bin edges: 0-5, 5-10, ..., 125-130
+        bin_edges = np.arange(0, 131, 5)  # Creates [0, 5, 10, ..., 130]
+        
+        plt.figure(figsize=(10, 6))
+        
+        for file, color in zip(csv_files, colors):
+            df = pd.read_csv(file)
+            
+            perplexity_col = next((col for col in df.columns if 'perplexity' in col.lower()), None)
+            
+            if perplexity_col is None:
+                print(f"Skipping {file} — no 'perplexity' column found.")
+                continue
+            
+            # Plot histogram for this file with fixed bins
+            plt.hist(df[perplexity_col].dropna(), bins=bin_edges, edgecolor='black', alpha=0.5, 
+                    label=os.path.basename(file), color=color)
+        
+        if not plt.gca().has_data():
+            print("No valid perplexity data found.")
+            return
+        
+        plt.title("Perplexity Distribution Across CSV Files (0-5, 5-10, ..., 125-130)")
+        plt.xlabel("Perplexity")
+        plt.ylabel("Frequency")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+    def plot_perplexity_histogram_with_kde(self):
+        folder_path = "final_results_csv"
+        
+        csv_files = glob.glob(os.path.join(folder_path, "*perplexity*.csv"))
+
+        if not csv_files:
+            print("No CSV files with 'perplexity' found.")
+            return
+        
+        # Define colors for different files
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
+        
+        # Define bin edges: 0-5, 5-10, ..., 125-130
+        bin_edges = np.arange(0, 131, 5)  # Creates [0, 5, 10, ..., 130]
+        
+        plt.figure(figsize=(10, 6))
+        
+        for file, color in zip(csv_files, colors):
+            df = pd.read_csv(file)
+            
+            perplexity_col = next((col for col in df.columns if 'perplexity' in col.lower()), None)
+            
+            if perplexity_col is None:
+                print(f"Skipping {file} — no 'perplexity' column found.")
+                continue
+            
+            # Get perplexity data
+            data = df[perplexity_col].dropna()
+            if len(data) == 0:
+                continue
+            
+            # Plot histogram
+            plt.hist(data, bins=bin_edges, edgecolor='black', alpha=0.3, 
+                    label=f"{os.path.basename(file)} (hist)", color=color, density=True)
+            
+            # Plot KDE
+            sns.kdeplot(data=data, color=color, label=f"{os.path.basename(file)} (KDE)", linewidth=2)
+        
+        if not plt.gca().has_data():
+            print("No valid perplexity data found.")
+            return
+        
+        plt.title("Perplexity Distribution with KDE Across CSV Files (0-5, 5-10, ..., 125-130)")
+        plt.xlabel("Perplexity")
+        plt.ylabel("Density")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+    def plot_perplexity_kde_only(self):
+        folder_path = "final_results_csv"
+        
+        csv_files = glob.glob(os.path.join(folder_path, "*perplexity*.csv"))
+
+        if not csv_files:
+            print("No CSV files with 'perplexity' found.")
+            return
+        
+        # Define colors for different files
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
+        
+        plt.figure(figsize=(10, 6))
+        
+        for file, color in zip(csv_files, colors):
+            df = pd.read_csv(file)
+            
+            perplexity_col = next((col for col in df.columns if 'perplexity' in col.lower()), None)
+            
+            if perplexity_col is None:
+                print(f"Skipping {file} — no 'perplexity' column found.")
+                continue
+            
+            # Get perplexity data
+            data = df[perplexity_col].dropna()
+            if len(data) == 0:
+                continue
+            
+            # Plot KDE
+            sns.kdeplot(data=data, color=color, label=os.path.basename(file), linewidth=2, clip=(0, 130))
+        
+        if not plt.gca().has_data():
+            print("No valid perplexity data found.")
+            return
+        plt.title("Perplexity KDE Across CSV Files (0 to 130)")
+        plt.xlabel("Perplexity")
+        plt.ylabel("Density")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
 st=StyleTransfer()
 from datetime import datetime
 now = datetime.now()
 print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
-
-st.create_csv_with_perplexity('all_songs_5_claude_raw_author.csv',column='new_song')
-#st.fill_csv(model='claude',mode=5)
+st.plot_perplexity_kde_only()
+#st.create_csv_with_perplexity('all_songs_5_nova_raw_author.csv',column='new_song')
+#st.fill_csv(model='nova',mode=5)
 now = datetime.now()
-print("Current date and time:", now)
+print("Current date and time:", now)    
 #3 1:24 - 6.22
 #4 7:06-10:50 16:25 -18 : 54
-#5 20:22
+#5 20:22 11:45
+
+# nova micro 
+#5 14:39     19:59
   
     
 
