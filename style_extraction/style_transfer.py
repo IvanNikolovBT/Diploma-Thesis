@@ -329,7 +329,7 @@ class StyleTransfer:
                     all_author_words=all_author_words,
                     styles=[]
                 )
-                
+                #print(f'TEST {prompt}')
             elif mode == 4:
                 print(f'Mode {mode}: model {model} styles 1200')
                 
@@ -670,8 +670,8 @@ class StyleTransfer:
             print("No CSV files with 'perplexity' found.")
             return
         
-        # Define colors for different files
-        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
+        
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  
         
         plt.figure(figsize=(10, 6))
         
@@ -684,7 +684,7 @@ class StyleTransfer:
                 print(f"Skipping {file} — no 'perplexity' column found.")
                 continue
             
-            # Plot histogram for this file with 13 bins
+            
             plt.hist(df[perplexity_col].dropna(), bins=bins, edgecolor='black', alpha=0.5, 
                     label=os.path.basename(file), color=color)
         
@@ -737,7 +737,7 @@ class StyleTransfer:
             num_bins = int(np.ceil(data_range / bin_width))  
             num_bins = max(5, min(num_bins, 100)) 
         
-        # Plot histogram
+        
         plt.figure(figsize=(10, 6))
         plt.hist(all_perplexities, bins=num_bins, edgecolor='black', alpha=0.7, label='Perplexity Values')
         
@@ -756,11 +756,11 @@ class StyleTransfer:
             print("No CSV files with 'perplexity' found.")
             return
         
-        # Define colors for different files
-        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files)))  # Use tab10 colormap for distinct colors
         
-        # Define bin edges: 0-5, 5-10, ..., 125-130
-        bin_edges = np.arange(0, 131, 5)  # Creates [0, 5, 10, ..., 130]
+        colors = plt.cm.tab10(np.linspace(0, 1, len(csv_files))) 
+        
+        
+        bin_edges = np.arange(0, 131, 5)  
         
         plt.figure(figsize=(10, 6))
         
@@ -773,7 +773,7 @@ class StyleTransfer:
                 print(f"Skipping {file} — no 'perplexity' column found.")
                 continue
             
-            # Plot histogram for this file with fixed bins
+            
             plt.hist(df[perplexity_col].dropna(), bins=bin_edges, edgecolor='black', alpha=0.5, 
                     label=os.path.basename(file), color=color)
         
@@ -882,7 +882,7 @@ print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 #st.plot_perplexity_kde_only()
 #st.create_csv_with_perplexity('all_songs_5_nova_raw_author.csv',column='new_song')
-st.fill_csv(model='nova',mode=4)
+st.fill_csv(model='nova',mode=3)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
@@ -891,6 +891,7 @@ print("Current date and time:", now)
 
 # nova micro 
 #5 14:39     19:59
-#4 20:51   
+#4 20:51  - 00:39
+#3 
     
 
