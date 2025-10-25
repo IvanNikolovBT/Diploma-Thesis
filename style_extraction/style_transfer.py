@@ -312,6 +312,7 @@ class StyleTransfer:
                     styles=styles_to_apply,
                     example_song=example_song_text
                 )
+                #print(prompt)
 
             elif mode == 2:
                 print(f'Mode {mode}: model {model} idf + styles 1200')
@@ -882,7 +883,7 @@ print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 #st.plot_perplexity_kde_only()
 #st.create_csv_with_perplexity('all_songs_5_nova_raw_author.csv',column='new_song')
-st.fill_csv(model='nova',mode=3)
+st.fill_csv(model='nova',mode=1)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
@@ -893,5 +894,6 @@ print("Current date and time:", now)
 #5 14:39     19:59 - 5:20 sati celosno (imashe lufta)
 #4 20:51  - 00:39 -4:50 sati celosno
 #3 0:40 - 4:01 -194 
-    
+#2 5:56:20      - 9:35
+#1 10:10   
 
