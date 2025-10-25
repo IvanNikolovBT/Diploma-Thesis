@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Union, Dict, List, Optional, Any
 from langchain_core.documents import Document
 import chromadb
-from preprocessor import Preprocessor
+from RAG_builder.preprocessor import Preprocessor
 import logging
 import time 
 from tqdm import tqdm

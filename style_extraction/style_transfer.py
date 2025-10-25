@@ -19,16 +19,20 @@ import glob
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import spacy
+from RAG_builder.vectorbuilder import VectorDBBuilder
 class StyleTransfer:
     
     def __init__(self):
 
         self.db=PoetryDB()
-        self.CSV_PATH="classification/cleaned_songs.csv"
+        self.CSV_PATH="final_results_csv/cleaned_songs_with_perplexity.csv"
         self.df=pd.read_csv(self.CSV_PATH)
         self.random_seed=47
         self.styles=self.load_styles()
         self.client = boto3.client("bedrock-runtime",region_name="eu-central-1",)
+        self.vector_db=VectorDBBuilder()
+        self.spacy=spacy.load("mk_core_news_lg")
     
     def load_styles(self):
         abs_path = os.path.abspath('style_extraction/styles.json')
@@ -348,6 +352,16 @@ class StyleTransfer:
                     styles=[]
                 )
                  #print(f'TEST {prompt}')
+            elif mode==6:
+                print(f'Mode {mode}: model {model} testing author model knowledge 1200')
+                print(self.lemmas_from_text(all_author_words))
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=[],
+                    styles=[],
+                    
+                )
+                return
             success = False
             retries = 0
             max_retries = 3
@@ -661,7 +675,16 @@ class StyleTransfer:
             print("Warning: Original DataFrame was modified unexpectedly.")
         
         return output_csv
+    def lemmas_from_text(self,words):
+        lemmas = []
+        for word in words:
+            doc = self.nlp(word)
+            for token in doc:
+                if token.is_alpha and not token.is_stop:
+                    lemmas.append(token.lemma_.lower())
+        return lemmas
     
+        
     def plot_perplexity_histogram_n_bins(self,bins=13):
         folder_path = "final_results_csv"
         
@@ -883,7 +906,7 @@ print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 #st.plot_perplexity_kde_only()
 st.create_csv_with_perplexity('all_songs_4_nova_styles.csv',column='new_song')
-#st.fill_csv(model='nova',mode=1)
+st.fill_csv(model='nova',mode=6)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
