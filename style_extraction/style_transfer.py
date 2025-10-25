@@ -887,11 +887,11 @@ now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
 #4 7:06-10:50 16:25 -18 : 54
-#5 20:22 11:45
+#5 20:22 11:45 
 
 # nova micro 
-#5 14:39     19:59
-#4 20:51  - 00:39
-#3 
+#5 14:39     19:59 - 5:20 sati celosno (imashe lufta)
+#4 20:51  - 00:39 -4:50 sati celosno
+#3 0:40 - 4:01 -194 
     
 
