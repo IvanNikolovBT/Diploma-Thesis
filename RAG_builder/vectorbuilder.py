@@ -318,8 +318,11 @@ class VectorDBBuilder:
                         text=text[len(prefix):]
                     found=text.split('\n', 1)[0]
                     source=result['source']                   
-                    distance=result['distances'][0]
-                    results.append({"lemma": lemma, "lemma_found":found,text:"text","source":source,'distance':distance})
+                    if source=='semantic':
+                        distance=result['distances'][0]
+                    else:
+                        distance=0
+                    results.append({"lemma": lemma, "lemma_found":found,"text":text+"\n","source":source,'distance':distance})
                 except Exception as e:
                    print(f"Query failed for lemma '{lemma}': {e}")
                     

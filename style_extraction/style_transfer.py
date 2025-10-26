@@ -211,7 +211,7 @@ class StyleTransfer:
 
         updated_df.to_csv(results_path, index=False)
         print(f"✅ CSV updated/created at: {results_path}")  
-    def create_prompt_template(self, author, all_author_words, example_song='', num_words=10, styles=None):
+    def create_prompt_template(self, author, all_author_words, example_song='', num_words=10, styles=None,dictionary=[]):
         styles = [s.strip() for s in (styles or []) if isinstance(s, str) and s.strip()]
 
         
@@ -222,7 +222,7 @@ class StyleTransfer:
         top_words = [word for word, _ in most_common_words[:num_words]]
         words_string = ", ".join(top_words)
         styles_string = "\n".join(f"- {s}" for s in styles)
-
+        dictionary_string=''.join(dictionary)
         prompt_parts = []
 
         
@@ -234,8 +234,10 @@ class StyleTransfer:
         if most_common_words:
             prompt_parts.append("Најизразити зборови кои треба да се искористат во песната:")
             prompt_parts.append(words_string)
-
-        if not(styles) and  not(most_common_words):
+        if dictionary:
+            prompt_parts.append('Најизрасити зборови кои треба да се искористат во песната и нивна дефиницја во толковен речник.')
+            prompt_parts.append(dictionary_string)
+        if not(styles) and  not(most_common_words)  and not(dictionary):
             prompt_parts.append(
             f"\n\nИзгенерирај македонска поезија, во стилот на {author} користејќи ги горенаведените насоки. "
             "Песната мора да има наслов. Насловот запиши го во следниот формат: "
@@ -251,7 +253,7 @@ class StyleTransfer:
             "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
             "Не ги користи имињата на самите насоки на значење. Биди креативен!"
         )
-
+    
         
         if example_song:
             prompt_parts.append(f"\n\nПример песна од авторот {author}:")
@@ -359,7 +361,7 @@ class StyleTransfer:
                 lemas=self.lemmas_from_text(words_for_author)
                 lemas_explained=self.vector_db.query_lemmas(lemas)
                 text_values = [entry.get("text", "") for entry in lemas_explained]
-                print(text_values)
+                
                 csv_data = []
                 for result in lemas_explained:
                     if result['source'] == 'semantic':
@@ -379,9 +381,10 @@ class StyleTransfer:
                     author=author,
                     all_author_words=[],
                     styles=[],
+                    dictionary=text_values
                     
                 )
-                
+                print(prompt)
                 return
             success = False
             retries = 0
