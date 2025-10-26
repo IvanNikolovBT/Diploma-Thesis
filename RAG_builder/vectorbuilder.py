@@ -232,9 +232,7 @@ class VectorDBBuilder:
         collection_name: str = "macedonian_dictionary_v2",
         n_results: int = 1
     ) -> Dict:
-        """
-        Run semantic (embedding) search only.
-        """
+
         collection = self.client.get_collection(collection_name)
         query_embedding = self.model.encode(query_text).tolist()
         sem_results = collection.query(
@@ -258,14 +256,6 @@ class VectorDBBuilder:
         n_results: int = 1,
         flag: int = 0
     ) -> Dict:
-        """
-        Dictionary lookup with flexible modes:
-
-        flag=0 → Try lexical first, if not found use semantic fallback.  
-        flag=1 → Only lexical.  
-        flag=2 → Only semantic.  
-        flag=3 → Return both lexical and semantic.  
-        """
         try:
             collection = self.client.get_collection(collection_name)
 
@@ -316,7 +306,24 @@ class VectorDBBuilder:
         except Exception as e:
             logger.error(f"Dictionary query failed: {e}")
             return {}
-
+    def query_lemmas(self, lemmas, collection_name="macedonian_dictionary_v2", n_results=1, flag=0):
+            
+            results = []
+            for lemma in lemmas:
+                try:
+                    result = self.query_dictionary_lexical(lemma, collection_name, n_results, flag)
+                    text=result['documents'][0]
+                    prefix = 'Почетна\nКорпус\nТопоними\nКратенки\nToggle sidebar\n'
+                    if text.startswith(prefix):
+                        text=text[len(prefix):]
+                    found=text.split('\n', 1)[0]
+                    source=result['source']                   
+                    distance=result['distances'][0]
+                    results.append({"lemma": lemma, "lemma_found":found,text:"text","source":source,'distance':distance})
+                except Exception as e:
+                   print(f"Query failed for lemma '{lemma}': {e}")
+                    
+            return results
 
 """if __name__ == "__main__":
     try:

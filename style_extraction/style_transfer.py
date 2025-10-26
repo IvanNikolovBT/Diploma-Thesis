@@ -1,5 +1,6 @@
 import sys
 import os
+import csv
 import pandas as pd
 import random
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -354,13 +355,33 @@ class StyleTransfer:
                  #print(f'TEST {prompt}')
             elif mode==6:
                 print(f'Mode {mode}: model {model} testing author model knowledge 1200')
-                print(self.lemmas_from_text(all_author_words))
+                words_for_author=all_author_words['expressive_words'][author]
+                lemas=self.lemmas_from_text(words_for_author)
+                lemas_explained=self.vector_db.query_lemmas(lemas)
+                text_values = [entry.get("text", "") for entry in lemas_explained]
+                print(text_values)
+                csv_data = []
+                for result in lemas_explained:
+                    if result['source'] == 'semantic':
+                        
+                        csv_data.append({
+                            'lemma': result['lemma'],
+                            'lemma_found': result['lemma_found'],
+                            'distance': result['distance']
+                        })
+
+                
+                if csv_data:
+                    self.write_to_semantic_search_csv(csv_data, csv_file="semantic_search_log.csv")
+                
+
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=[],
                     styles=[],
                     
                 )
+                
                 return
             success = False
             retries = 0
@@ -584,6 +605,18 @@ class StyleTransfer:
 
         except Exception as e:
             print(f"Error generating random prompt: {e}")
+    def write_to_semantic_search_csv(self,data, csv_file="semantic_search_log.csv"):
+        csv_exists = os.path.exists(csv_file)
+        with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not csv_exists:
+                writer.writerow(['lemma', 'lemma_found', 'distance'])
+            for entry in data:
+                writer.writerow([
+                    entry.get('lemma', ''),
+                    entry.get('lemma_found', ''),
+                    entry.get('distance', 0.0)
+            ])
     def invoke_claude_model(self, prompt, system):
         response = self.client.converse(
             modelId="anthropic.claude-3-haiku-20240307-v1:0",
@@ -628,7 +661,7 @@ class StyleTransfer:
         )
         model.eval()
         
-        print(f'device DEVICE {device}')
+        
         
         if not os.path.exists(output_csv):
             df_output.to_csv(output_csv, index=False)
@@ -675,12 +708,12 @@ class StyleTransfer:
             print("Warning: Original DataFrame was modified unexpectedly.")
         
         return output_csv
-    def lemmas_from_text(self,words):
+    def lemmas_from_text(self, words):
         lemmas = []
         for word in words:
-            doc = self.nlp(word)
+            doc = self.spacy(word[0])  
             for token in doc:
-                if token.is_alpha and not token.is_stop:
+                if token.is_alpha:  
                     lemmas.append(token.lemma_.lower())
         return lemmas
     
@@ -905,7 +938,7 @@ now = datetime.now()
 print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 #st.plot_perplexity_kde_only()
-st.create_csv_with_perplexity('all_songs_4_nova_styles.csv',column='new_song')
+#st.create_csv_with_perplexity('all_songs_4_nova_styles.csv',column='new_song')
 st.fill_csv(model='nova',mode=6)
 now = datetime.now()
 print("Current date and time:", now)    
