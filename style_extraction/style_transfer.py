@@ -192,7 +192,7 @@ class StyleTransfer:
 
         updated_df.to_csv(results_path, index=False)
         print(f"✅ CSV updated/created at: {results_path}")  
-    def create_prompt_template(self, author, all_author_words, example_song='', num_words=10, styles=None,dictionary=[]):
+    def create_prompt_template(self, author, all_author_words, example_song='', num_words=10, styles=None,dictionary=[],semanticly_similar_song=''):
         styles = [s.strip() for s in (styles or []) if isinstance(s, str) and s.strip()]
 
         
@@ -210,8 +210,6 @@ class StyleTransfer:
         if styles:
             prompt_parts.append("Насоки на значење што треба да се искористат:")
             prompt_parts.append(styles_string)
-
-        
         if most_common_words:
             prompt_parts.append("Најизразити зборови кои треба да се искористат во песната:")
             prompt_parts.append(words_string)
@@ -239,6 +237,9 @@ class StyleTransfer:
         if example_song:
             prompt_parts.append(f"\n\nПример песна од авторот {author}:")
             prompt_parts.append(str(example_song).strip())
+        if semanticly_similar_song:
+            prompt_parts.append(f"\n\nПример исечоци од песни што се семантички слична со авторот {author}:")
+            prompt_parts.append(str(semanticly_similar_song).strip())
 
         prompt = "\n".join(prompt_parts)
         return prompt, "\n".join(styles) 
@@ -252,7 +253,8 @@ class StyleTransfer:
             3: 'idf.csv',
             4: 'styles.csv',
             5: 'raw_author.csv',
-            6:'explanatory_dictionary.csv'
+            6:'explanatory_dictionary.csv',
+            7:'idf_styles_rag_example.csv'
         }
         suffix = mode_to_suffix.get(mode, 'output.csv')
         output_path = f'all_songs_{mode}_{model}_{suffix}'
@@ -367,15 +369,20 @@ class StyleTransfer:
                     
                 )
             elif mode==7:
-                print(f'Mode {mode}: model {model} idf + styles + example 1200')
+                print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
                 example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
+                
                 example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
+                query=self.vector_db.query_database_semantic(example_song_text)
+                
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
                     all_author_words=all_author_words,
                     styles=styles_to_apply,
-                    example_song=example_song_text
+                    semanticly_similar_song=query['documents'][0]
                 )
+                #print(prompt)
+                
                 
             success = False
             retries = 0
@@ -937,13 +944,15 @@ print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 #st.plot_perplexity_kde_only()
 #st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_6_nova_explanatory_dictionary.csv',column='new_song')
-#st.fill_csv(model='claude',mode=6)
+st.fill_csv(model='nova',mode=7)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
 #4 7:06-10:50 16:25 -18 : 54
 #5 20:22 11:45 
 #6 -6:53 duration (308)
+#7 11:53 - 15:50    pred- 17:55 (77 minuti)
+
 # nova micro 
 #5 14:39     19:59 - 5:20 sati celosno (imashe lufta)
 #4 20:51  - 00:39 -4:50 sati celosno
