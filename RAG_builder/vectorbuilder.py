@@ -44,7 +44,6 @@ class VectorDBBuilder:
         for key, value in metadata.items():
             if value is None:
     
-                #logger.warning(f"Found None value in metadata field: {key} for book with book id {metadata['book_id']} and file name {metadata['file_name']}")
                 if key.endswith("_id") or key in ["page", "chunk_seq"]:
                     cleaned[key] = 0
                 elif key in ["is_ocr", "is_processed"]:

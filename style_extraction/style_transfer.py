@@ -71,25 +71,6 @@ class StyleTransfer:
             }
         )
         return response
-    def write_to_csv(self,author:str,song_title:str,result:json,output_path='api_styles_all_in_one_text.csv'):
-        
-        text=result['output']['message']['content'][0]['text'] 
-        input_tokens=result['usage']['inputTokens']
-        output_tokens=result['usage']['outputTokens']
-        total_tokens=result['usage']['totalTokens']
-        ms=result['metrics']['latencyMs']
-        
-        row={'author':author,
-             'song_title':song_title,
-             'extracted_styles':text,
-             'input_tokens':input_tokens,
-             'output_tokens':output_tokens,
-             'total_tokens':total_tokens,
-             'ms':ms
-             }
-        api_csv = pd.DataFrame([row])
-        file_exists = os.path.isfile(output_path)
-        api_csv.to_csv(output_path, mode="a", index=False, header=not file_exists, encoding="utf-8")
     def extract_styles_from_song_using_api(self,song,author,song_title,output_path,without_def=True):
         system="Ти си разговорник за екстракција на стил на македонска поезија."
         if without_def:
@@ -270,7 +251,8 @@ class StyleTransfer:
             2: 'idf_styles.csv',
             3: 'idf.csv',
             4: 'styles.csv',
-            5: 'raw_author.csv'
+            5: 'raw_author.csv',
+            6:'explanatory_dictionary.csv'
         }
         suffix = mode_to_suffix.get(mode, 'output.csv')
         output_path = f'all_songs_{mode}_{model}_{suffix}'
@@ -384,8 +366,17 @@ class StyleTransfer:
                     dictionary=text_values
                     
                 )
-                print(prompt)
-                return
+            elif mode==7:
+                print(f'Mode {mode}: model {model} idf + styles + example 1200')
+                example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
+                example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=all_author_words,
+                    styles=styles_to_apply,
+                    example_song=example_song_text
+                )
+                
             success = False
             retries = 0
             max_retries = 3
@@ -424,6 +415,8 @@ class StyleTransfer:
                     if "ThrottlingException" in str(e):
                         wait_time = random.uniform(20, 40)
                         print(f"Throttled! Waiting {wait_time:.2f}s before retrying...")
+                    elif "No song found. Try again!" in str(e):
+                        print(f"No song found! Retrying...")
                     else:
                         wait_time = random.uniform(10, 20)
                         print(f"Retrying after {wait_time:.2f}s...")
@@ -457,6 +450,8 @@ class StyleTransfer:
         song_match = re.search(r'<ПЕСНА>\s*(.*?)\s*</ПЕСНА>', text, re.DOTALL)
         
         song_content = song_match.group(1).strip() if song_match else 'no_song_found'
+        if song_content=='no_song_found':
+            raise ValueError("No song found for the specified author.")
         text = f"{name_of_new_song}\n\n{song_content.strip()}"
 
         row = {
@@ -941,18 +936,19 @@ now = datetime.now()
 print("Current date and time:", now)
 #st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 #st.plot_perplexity_kde_only()
-#st.create_csv_with_perplexity('all_songs_4_nova_styles.csv',column='new_song')
-st.fill_csv(model='nova',mode=6)
+#st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_6_nova_explanatory_dictionary.csv',column='new_song')
+#st.fill_csv(model='claude',mode=6)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
 #4 7:06-10:50 16:25 -18 : 54
 #5 20:22 11:45 
-
+#6 -6:53 duration (308)
 # nova micro 
 #5 14:39     19:59 - 5:20 sati celosno (imashe lufta)
 #4 20:51  - 00:39 -4:50 sati celosno
 #3 0:40 - 4:01 -194 
 #2 5:56:20      - 9:35
 #1 10:10   14:10
-
+#6 15:47 22:15:54
+#7 
