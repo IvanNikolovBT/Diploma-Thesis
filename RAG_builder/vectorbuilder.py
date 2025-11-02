@@ -6,9 +6,11 @@ import chromadb
 from RAG_builder.preprocessor import Preprocessor
 import logging
 import time 
+import numpy as np
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 from chromadb.utils import embedding_functions
+from transformers import AutoTokenizer, AutoModel
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
 BM25_STORE = Path("vector_db/bm25_texts.json")
@@ -53,8 +55,129 @@ class VectorDBBuilder:
             else:
                 cleaned[key] = value
         return cleaned
+    
+    def get_macedonizer_embeddings(self,
+        texts: List[str],
+        tokenizer,
+        model,
+        device,
+        batch_size: int = 64,
+        max_len: int = 512
+    ) -> np.ndarray:
+        all_emb = []
+        model.eval()
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            enc = tokenizer(
+                batch,
+                truncation=True,
+                max_length=max_len,
+                padding='max_length',
+                return_tensors="pt"
+            )
+            input_ids = enc["input_ids"].to(device)
+            attention_mask = enc["attention_mask"].to(device)
+            with torch.no_grad():
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                hidden = outputs.last_hidden_state
+            mask = attention_mask.unsqueeze(-1).float()
+            masked = hidden * mask
+            summed = masked.sum(1)
+            lengths = mask.sum(1).clamp(min=1.0)
+            mean_pooled = summed / lengths
+            all_emb.append(mean_pooled.cpu().numpy())
+        embeddings = np.vstack(all_emb)
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        embeddings = embeddings / norms
+        return embeddings
 
-    def create_vector_db(self,choice, 
+    def create_vector_db_macedonizer(
+        self,
+        choice: str,
+        documents: Union[Dict[str, List[Document]], List[Document]],
+        collection_name: str = "macedonian_poetry",
+        batch_size: int = 64,
+        embedding_batch_size: int = 64,
+        max_len: int = 512,
+    ) -> Optional[chromadb.Collection]:
+        existing_collections = [c.name for c in self.client.list_collections()]
+        collection_exists = collection_name in existing_collections
+        if collection_exists:
+            if choice == "3":
+                print("Operation cancelled.")
+                return self.client.get_collection(collection_name)
+            elif choice == "2":
+                print(f"Deleting existing collection '{collection_name}'...")
+                self.client.delete_collection(collection_name)
+                collection_exists = False
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Loading macedonizer/mk-roberta-base on {device}...")
+        tokenizer = AutoTokenizer.from_pretrained("macedonizer/mk-roberta-base")
+        model = AutoModel.from_pretrained("macedonizer/mk-roberta-base")
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        model.to(device)
+        model.eval()
+        if not documents:
+            logger.error("No documents provided")
+            return None
+        all_chunks: List[Document] = []
+        if isinstance(documents, dict):
+            for book_id, chunks in documents.items():
+                if not chunks:
+                    logger.warning(f"No chunks for book {book_id}")
+                    continue
+                all_chunks.extend(chunks)
+        else:
+            all_chunks = documents
+        if not all_chunks:
+            logger.error("No valid chunks found")
+            return None
+        total_chunks = len(all_chunks)
+        print(f"Preparing to embed {total_chunks} chunks...")
+        collection = self.client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"}
+        )
+        processed = 0
+        start_time = time.time()
+        for i in range(0, total_chunks, batch_size):
+            batch_docs = all_chunks[i:i + batch_size]
+            texts = []
+            metadatas = []
+            ids = []
+            for j, doc in enumerate(batch_docs):
+                if not isinstance(doc, Document) or not getattr(doc, "page_content", None):
+                    continue
+                cleaned_meta = self._clean_and_validate_metadata(doc.metadata)
+                texts.append(doc.page_content)
+                metadatas.append(cleaned_meta)
+                ids.append(f"chunk_{i + j}")
+            if not texts:
+                continue
+            embeddings = self.get_macedonizer_embeddings(
+                texts=texts,
+                tokenizer=tokenizer,
+                model=model,
+                device=device,
+                batch_size=embedding_batch_size,
+                max_len=max_len
+            )
+            collection.upsert(
+                documents=texts,
+                embeddings=embeddings.tolist(),
+                metadatas=metadatas,
+                ids=ids
+            )
+            processed += len(texts)
+            if (i // batch_size) % 5 == 0:
+                elapsed = time.time() - start_time
+                print(f"  -> {processed}/{total_chunks} chunks ({elapsed:.1f}s)")
+        total_time = time.time() - start_time
+        print(f"\nVector DB '{collection_name}' ready with {collection.count()} chunks in {total_time:.1f}s")
+        return collection
+    def legacy_create_vector_db(self,choice, 
                     documents: Union[Dict[str, List[Document]], List[Document]], 
                     collection_name: str = "macedonian_poetry") -> Optional[chromadb.Collection]:
         """Create or update vector database with interactive options"""
@@ -188,18 +311,59 @@ class VectorDBBuilder:
             logger.error(f"Query failed: {e}")
             return {}
     
-    def build_database_fully(self):
-        """choice = input("Would you like to: \n"
-                            "1. Add these documents to existing collection\n"
-                            "2. Recreate the collection from scratch\n"
-                            "3. Cancel operation\n"
-                            "Enter choice (1-3): ").strip()"""
-        choice=2
-        text_docs=self.preprocessor.load_txt()
-        pdf_docs=self.preprocessor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
-        self.create_vector_db(choice,text_docs+pdf_docs)
+    def build_database_fully(self, choice=2, database='makedonizer_poetry_db'):
+        text_docs = self.preprocessor.load_txt()
+        pdf_docs = self.preprocessor.load_all_pdfs("/home/ivan/Desktop/Diplomska/pdfovi/MIladinovci")
         
-    def build_dictionary_vdb(self):
+        all_docs = text_docs + pdf_docs
+        
+        for doc in all_docs:
+            if hasattr(doc, 'page_content') and isinstance(doc.page_content, str):
+                doc.page_content = doc.page_content.lower()
+        
+        self.create_vector_db_macedonizer(choice, all_docs, collection_name=database)
+        
+    def build_dictionary_vdb_macedonizer(self):
+        all_entries = self.preprocessor._get_all_from_o_tolkoven()
+        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        tokenizer = AutoTokenizer.from_pretrained("macedonizer/mk-roberta-base")
+        model = AutoModel.from_pretrained("macedonizer/mk-roberta-base")
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        model.to(device)
+        model.eval()
+
+        collection = self.client.get_or_create_collection(
+            name="macedonian_dictionary_macedonizer",
+            metadata={"hnsw:space": "cosine"}
+        )
+
+        for i in tqdm(range(0, len(all_entries), self.BATCH_SIZE)):
+            batch = all_entries[i:i + self.BATCH_SIZE]
+            
+            texts = [e['full_text'].lower() for e in batch]
+            ids = [str(e['id']) for e in batch]
+            metadatas = [{"title": e['title'], "pos_tags": e['pos_tags']} for e in batch]
+
+            embeddings = self.get_macedonizer_embeddings(
+                texts=texts,
+                tokenizer=tokenizer,
+                model=model,
+                device=device,
+                batch_size=32,
+                max_len=512
+            )
+
+            collection.add(
+                ids=ids,
+                documents=texts,
+                embeddings=embeddings.tolist(),
+                metadatas=metadatas
+            )
+
+        logger.info(f"Finished adding {len(all_entries)} entries to Macedonizer dictionary DB.")
+    def legacy_build_dictionary_vdb(self):
         """Build the vector database in batches."""
         all_entries = self.preprocessor._get_all_from_o_tolkoven()  
 
