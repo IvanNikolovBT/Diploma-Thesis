@@ -238,7 +238,7 @@ class StyleTransfer:
             prompt_parts.append(f"\n\nПример песна од авторот {author}:")
             prompt_parts.append(str(example_song).strip())
         if semanticly_similar_song:
-            prompt_parts.append(f"\n\nПример исечоци од песни што се семантички слична со авторот {author}:")
+            prompt_parts.append(f"\n\nПример исечоци од песни што се семантички слични со авторот {author}:")
             prompt_parts.append(str(semanticly_similar_song).strip())
 
         prompt = "\n".join(prompt_parts)
@@ -973,7 +973,7 @@ now = datetime.now()
 print("Current date and time:", now)
 #st.plot_perplexity_kde_only()
 #st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_7_nova_idf_styles_rag_example.csv','new_song')
-st.fill_csv(model=' nova',mode=8)
+st.fill_csv(model='nova',mode=8)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
@@ -981,7 +981,7 @@ print("Current date and time:", now)
 #5 20:22 11:45 
 #6 -6:53 duration (308)
 #7 11:53 - 15:50    pred- 17:55 (77 minuti)
-# 19:36 -00 36 33 
+#8 19:36 -00 36 33 
 
 # nova micro 
 #5 14:39     19:59 - 5:20 sati celosno (imashe lufta)
@@ -991,3 +991,4 @@ print("Current date and time:", now)
 #1 10:10   14:10
 #6 15:47 22:15:54
 #7 19:42 02:29:
+#8 8:10 - 15:35
