@@ -283,6 +283,60 @@ class VectorDBBuilder:
     def query_database_semantic(
         self,
         query_text: str,
+        collection_name: str = "makedonizer_poetry_db",
+        n_results: int = 5,
+        filters: Optional[Dict] = None
+    ) -> Dict:
+        """
+        Query poetry DB using Macedonizer embeddings (384 dim).
+        """
+        try:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            tokenizer = AutoTokenizer.from_pretrained("macedonizer/mk-roberta-base")
+            model = AutoModel.from_pretrained("macedonizer/mk-roberta-base")
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            model.to(device)
+            model.eval()
+
+            inputs = tokenizer(
+                [query_text.lower()],
+                truncation=True,
+                max_length=512,
+                padding="max_length",
+                return_tensors="pt"
+            ).to(device)
+
+            with torch.no_grad():
+                outputs = model(**inputs)
+                hidden = outputs.last_hidden_state
+
+            mask = inputs["attention_mask"].unsqueeze(-1).float()
+            pooled = (hidden * mask).sum(1) / mask.sum(1).clamp(min=1.0)
+            embedding = torch.nn.functional.normalize(pooled, p=2, dim=1)
+            query_embedding = embedding[0].cpu().numpy().tolist()
+
+            collection = self.client.get_collection(collection_name)
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_results,
+                where=filters,
+                include=["documents", "metadatas", "distances"]
+            )
+
+            return {
+                "documents": results["documents"][0] if results["documents"] else [],
+                "metadatas": results["metadatas"][0] if results["metadatas"] else [],
+                "distances": results["distances"][0] if results["distances"] else []
+            }
+
+        except Exception as e:
+            logger.error(f"Query failed: {e}")
+            return {"documents": [], "metadatas": [], "distances": []}
+    def legacy_query_database_semantic(
+        self,
+        query_text: str,
         collection_name: str = "macedonian_poetry",
         n_results: int = 5,
         filters: Optional[Dict] = None
@@ -388,8 +442,63 @@ class VectorDBBuilder:
             )
 
         logger.info(f"Finished adding {len(all_entries)} entries to the vector DB.")
-
     def query_dictionary_semantic(
+        self,
+        query_text: str,
+        collection_name: str = "macedonian_dictionary_macedonizer",
+        n_results: int = 1
+    ) -> Dict:
+ 
+        try:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            tokenizer = AutoTokenizer.from_pretrained("macedonizer/mk-roberta-base")
+            model = AutoModel.from_pretrained("macedonizer/mk-roberta-base")
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            model.to(device)
+            model.eval()
+
+            inputs = tokenizer(
+                [query_text.lower()],
+                truncation=True,
+                max_length=512,
+                padding="max_length",
+                return_tensors="pt"
+            ).to(device)
+
+            with torch.no_grad():
+                outputs = model(**inputs)
+                hidden = outputs.last_hidden_state
+
+            mask = inputs["attention_mask"].unsqueeze(-1).float()
+            pooled = (hidden * mask).sum(1) / mask.sum(1).clamp(min=1.0)
+            embedding = torch.nn.functional.normalize(pooled, p=2, dim=1)
+            query_embedding = embedding[0].cpu().numpy().tolist()
+
+            collection = self.client.get_collection(collection_name)
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_results,
+                include=["documents", "metadatas", "distances"]
+            )
+
+            return {
+                "documents": results["documents"][0] if results["documents"] else [],
+                "metadatas": results["metadatas"][0] if results["metadatas"] else [],
+                "distances": results["distances"][0] if results["distances"] else [],
+                "source": "semantic_macedonizer"
+            }
+
+        except Exception as e:
+            logger.error(f"Macedonizer dictionary query failed: {e}")
+            return {
+                "documents": [],
+                "metadatas": [],
+                "distances": [],
+                "source": "semantic_macedonizer"
+            }
+    def legacy_query_dictionary_semantic(
         self,
         query_text: str,
         collection_name: str = "macedonian_dictionary_v2",

@@ -254,7 +254,8 @@ class StyleTransfer:
             4: 'styles.csv',
             5: 'raw_author.csv',
             6:'explanatory_dictionary.csv',
-            7:'idf_styles_rag_example.csv'
+            7:'idf_styles_rag_example.csv',
+            8:'idf_styles_rag_example_makedonizer.csv',
         }
         suffix = mode_to_suffix.get(mode, 'output.csv')
         output_path = f'all_songs_{mode}_{model}_{suffix}'
@@ -369,6 +370,35 @@ class StyleTransfer:
                     
                 )
             elif mode==7:
+                print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
+                example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
+                
+                example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
+                query=self.vector_db.query_database_semantic(example_song_text)
+                
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=all_author_words,
+                    styles=styles_to_apply,
+                    semanticly_similar_song=query['documents'][0]
+                )
+                #print(prompt)
+            elif mode==8:
+                print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
+                example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
+                
+                example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
+                query=self.vector_db.query_database_semantic(example_song_text,collection_name='makedonizer_poetry_db')
+                
+                prompt, styles_string = self.create_prompt_template(
+                    author=author,
+                    all_author_words=all_author_words,
+                    styles=styles_to_apply,
+                    semanticly_similar_song=query['documents'][0]
+                )
+                print(prompt)
+                
+            elif mode==9:
                 print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
                 example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
                 
@@ -941,10 +971,9 @@ st=StyleTransfer()
 from datetime import datetime
 now = datetime.now()
 print("Current date and time:", now)
-#st.create_csv_with_perplexity('all_songs_3_claude_idf.csv',column='new_song')
 #st.plot_perplexity_kde_only()
-st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_7_nova_idf_styles_rag_example.csv','new_song')
-#st.fill_csv(model='nova',mode=7)
+#st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_7_nova_idf_styles_rag_example.csv','new_song')
+st.fill_csv(model=' nova',mode=8)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
@@ -952,6 +981,7 @@ print("Current date and time:", now)
 #5 20:22 11:45 
 #6 -6:53 duration (308)
 #7 11:53 - 15:50    pred- 17:55 (77 minuti)
+# 19:36 -00 36 33 
 
 # nova micro 
 #5 14:39     19:59 - 5:20 sati celosno (imashe lufta)
