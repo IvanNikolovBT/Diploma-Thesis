@@ -341,7 +341,7 @@ class StyleTransfer:
                 )
                  #print(f'TEST {prompt}')
             elif mode==6:
-                print(f'Mode {mode}: model {model} testing author model knowledge 1200')
+                print(f'Mode {mode}: model {model} lemas')
                 words_for_author=all_author_words['expressive_words'][author]
                 lemas=self.lemmas_from_text(words_for_author)
                 lemas_explained=self.vector_db.query_lemmas(lemas)
@@ -399,19 +399,35 @@ class StyleTransfer:
                 print(prompt)
                 
             elif mode==9:
-                print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
-                example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
+                print(f'Mode {mode}: model {model} using lemmas makedonizer')
+                words_for_author=all_author_words['expressive_words'][author]
+                lemas=self.lemmas_from_text(words_for_author)
+                lemas_explained=self.vector_db.query_lemmas(lemas,collection_name='macedonian_dictionary_macedonizer')
+                text_values = [entry.get("text", "") for entry in lemas_explained]
                 
-                example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
-                query=self.vector_db.query_database_semantic(example_song_text)
+                csv_data = []
+                for result in lemas_explained:
+                    if result['source'] == 'semantic_macedonizer':
+                        
+                        csv_data.append({
+                            'lemma': result['lemma'],
+                            'lemma_found': result['lemma_found'],
+                            'distance': result['distance']
+                        })
+
                 
+                if csv_data:
+                    self.write_to_semantic_search_csv(csv_data, csv_file="semantic_search_makedonizer_log_2.csv")
+                
+
                 prompt, styles_string = self.create_prompt_template(
                     author=author,
-                    all_author_words=all_author_words,
-                    styles=styles_to_apply,
-                    semanticly_similar_song=query['documents'][0]
+                    all_author_words=[],
+                    styles=[],
+                    dictionary=text_values
+                    
                 )
-                #print(prompt)
+                
                 
                 
             success = False
@@ -973,7 +989,7 @@ now = datetime.now()
 print("Current date and time:", now)
 #st.plot_perplexity_kde_only()
 #st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_7_nova_idf_styles_rag_example.csv','new_song')
-st.fill_csv(model='nova',mode=8)
+st.fill_csv(model='nova',mode=9)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
@@ -982,6 +998,7 @@ print("Current date and time:", now)
 #6 -6:53 duration (308)
 #7 11:53 - 15:50    pred- 17:55 (77 minuti)
 #8 19:36 -00 36 33 
+#9 20:20-1:35
 
 # nova micro 
 #5 14:39     19:59 - 5:20 sati celosno (imashe lufta)
@@ -990,5 +1007,6 @@ print("Current date and time:", now)
 #2 5:56:20      - 9:35
 #1 10:10   14:10
 #6 15:47 22:15:54
-#7 19:42 02:29:
+#7 19:42 02:29: 
 #8 8:10 - 15:35
+#9 3:20

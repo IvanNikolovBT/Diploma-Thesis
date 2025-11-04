@@ -1,4 +1,11 @@
-from RAG_builder.vectorbuilder import VectorDBBuilder 
+import chromadb
 
-test=VectorDBBuilder()
-test.build_dictionary_vdb_macedonizer()
+client = chromadb.PersistentClient(
+                path="vector_db",
+                settings=chromadb.Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True,
+                    is_persistent=True
+                )
+            )
+print(client.list_collections())

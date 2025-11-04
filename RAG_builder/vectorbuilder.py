@@ -579,26 +579,47 @@ class VectorDBBuilder:
             logger.error(f"Dictionary query failed: {e}")
             return {}
     def query_lemmas(self, lemmas, collection_name="macedonian_dictionary_v2", n_results=1, flag=0):
-            
-            results = []
-            for lemma in lemmas:
-                try:
-                    result = self.query_dictionary_lexical(lemma, collection_name, n_results, flag)
-                    text=result['documents'][0]
-                    prefix = 'Почетна\nКорпус\nТопоними\nКратенки\nToggle sidebar\n'
-                    if text.startswith(prefix):
-                        text=text[len(prefix):]
-                    found=text.split('\n', 1)[0]
-                    source=result['source']                   
-                    if source=='semantic':
-                        distance=result['distances'][0]
-                    else:
-                        distance=0
-                    results.append({"lemma": lemma, "lemma_found":found,"text":text+"\n","source":source,'distance':distance})
-                except Exception as e:
-                   print(f"Query failed for lemma '{lemma}': {e}")
+    
+        
+        prefix_words = [
+            "почетна",
+            "корпус",
+            "топоними",
+            "кратенки",
+            "toggle sidebar"
+        ]
+        prefix = "\n".join(prefix_words) + "\n"
+
+        results = []
+        for lemma in lemmas:
+            try:
+                result = self.query_dictionary_lexical(lemma, collection_name, n_results, flag)
+                text = result['documents'][0]
+
+                
+                if text.startswith(prefix):
+                    text = text[len(prefix):]
+
+                found = text.split('\n', 1)[0]
+                source = result['source']
+
+                if source == 'semantic':
+                    distance = result['distances'][0]
+                else:
+                    distance = 0
+
+                results.append({
+                    "lemma": lemma,
+                    "lemma_found": found,
+                    "text": text + "\n",
+                    "source": source,
+                    "distance": distance
+                })
+
+            except Exception as e:
+                print(f"Query failed for lemma '{lemma}': {e}")
                     
-            return results
+        return results
 
 """if __name__ == "__main__":
     try:
