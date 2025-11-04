@@ -256,6 +256,7 @@ class StyleTransfer:
             6:'explanatory_dictionary.csv',
             7:'idf_styles_rag_example.csv',
             8:'idf_styles_rag_example_makedonizer.csv',
+            9:'idf_styles_explanatory_dictionary_makedonizer.csv'
         }
         suffix = mode_to_suffix.get(mode, 'output.csv')
         output_path = f'all_songs_{mode}_{model}_{suffix}'
@@ -988,8 +989,8 @@ from datetime import datetime
 now = datetime.now()
 print("Current date and time:", now)
 #st.plot_perplexity_kde_only()
-#st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_7_nova_idf_styles_rag_example.csv','new_song')
-st.fill_csv(model='nova',mode=9)
+st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer.csv','new_song')
+#st.fill_csv(model='nova',mode=9)
 now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
@@ -1009,4 +1010,4 @@ print("Current date and time:", now)
 #6 15:47 22:15:54
 #7 19:42 02:29: 
 #8 8:10 - 15:35
-#9 3:20
+#9 3:20 - 10:13
