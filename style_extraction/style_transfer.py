@@ -305,8 +305,8 @@ class StyleTransfer:
                     styles=styles_to_apply,
                     example_song=example_song_text
                 )
-                #print(prompt)
-
+                print(prompt)
+                return
             elif mode == 2:
                 print(f'Mode {mode}: model {model} idf + styles 1200')
                 prompt, styles_string = self.create_prompt_template(
@@ -314,7 +314,8 @@ class StyleTransfer:
                     all_author_words=all_author_words,
                     styles=styles_to_apply,
                 )
-                
+                print(prompt)
+                return
 
             elif mode == 3:
                 print(f'Mode {mode}: model {model} idf 1200')
@@ -323,7 +324,8 @@ class StyleTransfer:
                     all_author_words=all_author_words,
                     styles=[]
                 )
-                #print(f'TEST {prompt}')
+                print(prompt)
+                return
             elif mode == 4:
                 print(f'Mode {mode}: model {model} styles 1200')
                 
@@ -340,7 +342,8 @@ class StyleTransfer:
                     all_author_words=[],
                     styles=[]
                 )
-                 #print(f'TEST {prompt}')
+                print(prompt)
+                return
             elif mode==6:
                 print(f'Mode {mode}: model {model} lemas')
                 words_for_author=all_author_words['expressive_words'][author]
@@ -370,6 +373,8 @@ class StyleTransfer:
                     dictionary=text_values
                     
                 )
+                print(prompt)
+                return
             elif mode==7:
                 print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
                 example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
@@ -383,7 +388,8 @@ class StyleTransfer:
                     styles=styles_to_apply,
                     semanticly_similar_song=query['documents'][0]
                 )
-                #print(prompt)
+                print(prompt)
+                return
             elif mode==8:
                 print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
                 example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
@@ -398,6 +404,7 @@ class StyleTransfer:
                     semanticly_similar_song=query['documents'][0]
                 )
                 print(prompt)
+                return
                 
             elif mode==9:
                 print(f'Mode {mode}: model {model} using lemmas makedonizer')
@@ -428,6 +435,8 @@ class StyleTransfer:
                     dictionary=text_values
                     
                 )
+                print(prompt)
+                return
                 
                 
                 
@@ -990,8 +999,8 @@ now = datetime.now()
 print("Current date and time:", now)
 #st.plot_perplexity_kde_only()
 st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer.csv','new_song')
-#st.fill_csv(model='nova',mode=9)
-now = datetime.now()
+st.fill_csv(model='nova',mode=1)
+#now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
 #4 7:06-10:50 16:25 -18 : 54
