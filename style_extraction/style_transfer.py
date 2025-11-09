@@ -218,11 +218,10 @@ class StyleTransfer:
             prompt_parts.append(dictionary_string)
         if not(styles) and  not(most_common_words)  and not(dictionary):
             prompt_parts.append(
-            f"\n\nИзгенерирај македонска поезија, во стилот на {author} користејќи ги горенаведените насоки. "
+            f"\n\nИзгенерирај македонска поезија, во стилот на {author}."
             "Песната мора да има наслов. Насловот запиши го во следниот формат: "
             "<НАСЛОВ>Тука вметни го насловот</НАСЛОВ>. "
             "Песната генерирај ја во рамките на <ПЕСНА>Тука вметни ја песната</ПЕСНА>. "
-            "Не ги користи имињата на самите насоки на значење. Биди креативен!"
         )
             prompt = "\n".join(prompt_parts)
         prompt_parts.append(
@@ -334,6 +333,8 @@ class StyleTransfer:
                     all_author_words=[],
                     styles=styles_to_apply
                 )
+                print(prompt)
+                return
                
             elif mode == 5:
                 print(f'Mode {mode}: model {model} testing author model knowledge 1200')
@@ -999,7 +1000,7 @@ now = datetime.now()
 print("Current date and time:", now)
 #st.plot_perplexity_kde_only()
 st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer.csv','new_song')
-st.fill_csv(model='nova',mode=1)
+st.fill_csv(model='nova_1',mode=7)
 #now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
