@@ -215,33 +215,3 @@ class Preprocessor:
     def _get_all_from_o_tolkoven(self):
         return self.db.get_words_from_dictionary()
     
-
-"""processor = Preprocessor()
-
-start=time.time()
-contents = processor.load_txt()
-print(f'Duration {time.time()-start} seconds for all semantic')
-   
-book_393_chunks = contents['1']
-print(f"Book 1has {len(book_393_chunks)} chunks")
-for i, chunk in enumerate(book_393_chunks[:30]):  
-    print(f"\nChunk {i+1}/{len(book_393_chunks)}")
-    print(f"Sequence: {chunk.metadata['chunk_seq']} of {chunk.metadata['total_chunks']}")
-    print(f"Prev: {chunk.metadata['prev_chunk_id']}")
-    print(f"Next: {chunk.metadata['next_chunk_id']}")
-    print('\n\n')
-    
-    print(chunk.page_content)"""
-"""pdfs=processor.load_all_pdfs()  
-for pdf in pdfs[:3]:
-    print(pdf)
-    """
-"""pdf_chunks = processor.load_pdf(Path("pdfovi/MIladinovci/9.pdf"))
-
-
-print(pdf_chunks)
-print("\nAvailable metadata fields:")
-print(pdf_chunks[0].metadata.keys())
-
-print("\nPDF technical metadata:")
-print(f"Page size: {pdf_chunks[0].metadata['pdf_page_size']}")"""

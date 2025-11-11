@@ -3,8 +3,6 @@ from typing import Optional
 import re
 from psycopg2.extras import RealDictCursor
 
-
-
 class PoetryDB:
     def __init__(self) -> None:
         self.conn: psycopg2.extensions.connection = psycopg2.connect(
@@ -244,7 +242,7 @@ class PoetryDB:
     def get_all_kik_song(self):
         with self.conn.cursor() as cur:
             cur.execute("SELECT * FROM song_kafe_kniga")
-            rows = cur.fetchall()        # <-- fetch all rows
+            rows = cur.fetchall()        
         return rows 
              
     def insert_word_information_o_tolkoven(self, title: str, pos_tags: str, text: str):
@@ -326,7 +324,7 @@ class PoetryDB:
                     """,
                     (f"%{book_id_from_miladinovci}%",),
                 )
-                return cur.fetchone()  # None if no match
+                return cur.fetchone()  
         except Exception as e:
             print("Database error:", e)
             raise               
