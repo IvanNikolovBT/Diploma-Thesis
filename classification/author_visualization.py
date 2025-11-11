@@ -10,11 +10,10 @@ from sklearn.cluster import DBSCAN
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 from scipy.stats import spearmanr
-from scipy.linalg import orthogonal_procrustes
 import torch
 from transformers import AutoTokenizer, AutoModel
 from scipy.sparse import hstack
-
+from sklearn.preprocessing import normalize
 class SongStyleVisualizer:
     DEFAULT_CSV_PATH = "/home/ivan/Desktop/Diplomska/final_results_csv/cleaned_songs_with_perplexity.csv"
     DEFAULT_STYLE_CSV_PATH = "/home/ivan/Desktop/Diplomska/api_styles_all_in_one_text.csv"
@@ -107,7 +106,7 @@ class SongStyleVisualizer:
         return np.array(features)
 
     def _get_content_matrix(self, df, use_transformer=False):
-        df = self._sample_per_author(df, None)  # Use all songs
+        df = self._sample_per_author(df, None)  
         texts = df["song_text"].tolist()
         authors = df["author"].tolist()
         cache_key = (hash(tuple(texts)), use_transformer)
@@ -310,14 +309,10 @@ class SongStyleVisualizer:
         print(f"\nMean Jaccard = {mean_j:.3f}")
         return results, mean_j
     def compare_author_representations(self, max_author_songs=None, use_transformer=True, n_components=50):
-        """
-        Compare TF-IDF vs Transformer using *separate* PCA reductions.
-        More interpretable and robust than joint PCA.
-        """
-        from sklearn.decomposition import PCA
-        from sklearn.preprocessing import normalize
 
-        # === 1. Sample & aggregate ===
+
+
+
         df_lyric = self._sample_per_author(self.lyrics_df, max_author_songs)
         author_texts = df_lyric.groupby("author")["song_text"].apply(" ".join).reset_index()
         authors = author_texts["author"].tolist()
@@ -326,10 +321,10 @@ class SongStyleVisualizer:
         if n_authors < 2:
             raise ValueError("Need ≥2 authors.")
 
-        # === 2. TF-IDF ===
+
         X_tfidf = TfidfVectorizer(max_features=5000).fit_transform(author_texts["song_text"]).toarray()
 
-        # === 3. Transformer ===
+
         if use_transformer:
             print(f"Computing transformer embeddings for {n_authors} authors...")
             X_trans = np.array([
@@ -341,7 +336,7 @@ class SongStyleVisualizer:
         else:
             X_trans = X_tfidf
 
-        # === 4. PCA Separately ===
+
         n_comp = min(n_components, n_authors - 1)
 
         pca_tfidf = PCA(n_components=n_comp, random_state=42)
@@ -352,11 +347,11 @@ class SongStyleVisualizer:
         X_trans_pca = pca_trans.fit_transform(X_trans)
         var_trans = pca_trans.explained_variance_ratio_.sum()
 
-        # === 5. Normalize ===
+
         X_tfidf_pca = normalize(X_tfidf_pca)
         X_trans_pca = normalize(X_trans_pca)
 
-        # === 6. Cosine similarity ===
+
         similarities = np.array([
             cosine_similarity([X_tfidf_pca[i]], [X_trans_pca[i]])[0, 0]
             for i in range(n_authors)
@@ -365,7 +360,7 @@ class SongStyleVisualizer:
         mean_sim = np.mean(similarities)
         std_sim = np.std(similarities)
 
-        # === 7. Print ===
+
         print(f"\nTF-IDF vs TRANSFORMER (Separate PCA, {n_comp}D each)")
         print(f"TF-IDF variance preserved : {var_tfidf:.1%}")
         print(f"Transformer variance preserved: {var_trans:.1%}")
@@ -381,7 +376,7 @@ class SongStyleVisualizer:
         else:
             print("WEAK alignment")
 
-        # === 8. Plot ===
+
         plt.figure(figsize=(10, max(6, n_authors * 0.3)))
         plt.barh(authors, similarities, color='steelblue')
         plt.xlabel("Cosine Similarity (Separate PCA Space)")
@@ -422,137 +417,68 @@ class SongStyleVisualizer:
         else: print("Weak")
         return rho, p
 
-    def procrustes_alignment(self, max_author_songs=None, use_transformer=False):
-        from scipy.linalg import orthogonal_procrustes
 
-        # Content
-        df_lyric = self._sample_per_author(self.lyrics_df, max_author_songs)
+    def plot_similarity_heatmap(
+        self,
+        use_transformer=False,
+        max_author_songs=None,
+        cmap='viridis',
+        remove_stopwords=False,
+        custom_stop_words=None
+    ):
+        default_stop_words = [
+            'ќе', 'би', 'ко', 'го', 'како', 'ги', 'ми', 'ти', 'те', 'му', 'само',
+            'зашто', 'таа', 'тие', 'нѐ', 'но', 'сѐ', 'со', 'по', 'ли', 'ој', 'ни',
+            'ниту', 'pinterest', 'до', 'таа', 'ние', 'вие', 'тие', 'си', 'то', 'сме',
+            'бил', 'јас', 'нека', 'кога', 'колку', 'тоа', 'дека', 'или', 'зар', 'ил',
+            'ме', 'со', 'кој', 'кон', 'та', 'оваа', 'овој', 'тој', 'кај', 'се', 'туку',
+            'ние', 'вие', 'тие', 'нѐ'
+        ]
+        stop_words = custom_stop_words if custom_stop_words is not None else default_stop_words
+        df = self._sample_per_author(self.lyrics_df, max_author_songs)
         if use_transformer:
-            Xc = self._get_transformer_embeddings(df_lyric["song_text"].tolist())
+            X = self._get_transformer_embeddings(df["song_text"].tolist())
+            df_x = pd.DataFrame(X, index=df["author"])
+            X = df_x.groupby(level=0).mean().values
+            authors = df_x.index.unique().tolist()
         else:
-            Xc = TfidfVectorizer(max_features=5000).fit_transform(df_lyric["song_text"]).toarray()
-        Xc = PCA(n_components=2).fit_transform(Xc)
-
-        # Style
-        df_style = self._sample_per_author(self.styles_df, max_author_songs)
-        Xs = self._extract_style_features(df_style)
-        Xs = PCA(n_components=2).fit_transform(Xs)
-
-        # Align by author + index
-        keys_c = [(a, i) for i, a in enumerate(df_lyric["author"])]
-        keys_s = [(a, i) for i, a in enumerate(df_style["author"])]
-        common_keys = sorted(set(keys_c) & set(keys_s))
-        idx_c = [keys_c.index(k) for k in common_keys]
-        idx_s = [keys_s.index(k) for k in common_keys]
-        Xc, Xs = Xc[idx_c], Xs[idx_s]
-        common_authors = [k[0] for k in common_keys]
-
-        Xc -= Xc.mean(axis=0); Xs -= Xs.mean(axis=0)
-        R, sca = orthogonal_procrustes(Xc, Xs)
-        Xc_aligned = Xc @ R * sca
-        disparity = ((Xc_aligned - Xs) ** 2).sum() / (Xs ** 2).sum()
-
-        unique_authors = np.unique(common_authors)
-        cmap = plt.cm.get_cmap("tab20", len(unique_authors))
-        color_map = {a: cmap(i) for i, a in enumerate(unique_authors)}
-
-        plt.figure(figsize=(10, 5))
-        for auth in unique_authors:
-            mask = np.array(common_authors) == auth
-            plt.subplot(1, 2, 1).scatter(Xc[mask, 0], Xc[mask, 1], c=[color_map[auth]], s=30, alpha=0.7, label=auth)
-            plt.subplot(1, 2, 2).scatter(Xs[mask, 0], Xs[mask, 1], c=[color_map[auth]], s=30, alpha=0.7)
-        plt.subplot(1, 2, 1).set_title("Content"); plt.subplot(1, 2, 2).set_title("Style")
-        plt.suptitle(f"Procrustes (disparity = {disparity:.4f})")
-        plt.tight_layout(); plt.show()
-        return disparity
-
-    def plot_similarity_heatmap(self, space='content', max_author_songs=None, cmap='viridis', use_transformer=False):
-
-        if space in ('content', 'both'):
-            df_lyric = self._sample_per_author(self.lyrics_df, max_author_songs)
-            if use_transformer:
-                Xc = self._get_transformer_embeddings(df_lyric["song_text"].tolist())
-                df_c = pd.DataFrame(Xc, index=df_lyric["author"])
-                Xc = df_c.groupby(level=0).mean().values
-            else:
-                author_texts = df_lyric.groupby('author')['song_text'].apply(' '.join).reset_index()
-                Xc = TfidfVectorizer(max_features=5000).fit_transform(author_texts['song_text']).toarray()
-
-        if space in ('style', 'both'):
-            df_style = self._sample_per_author(self.styles_df, max_author_songs)
-            Xs = self._extract_style_features(df_style)
-            df_s = pd.DataFrame(Xs)
-            df_s['author'] = df_style['author'].values
-            Xs = df_s.groupby('author').max().values
-
-
-        if space == 'both':
-            authors_c = df_lyric.groupby('author').apply(lambda x: x.name).index.tolist() \
-                        if use_transformer else author_texts['author'].tolist()
-            authors_s = df_s.groupby('author').max().index.tolist()
-
-            common = sorted(set(authors_c) & set(authors_s))
-            idx_c = [authors_c.index(a) for a in common]
-            idx_s = [authors_s.index(a) for a in common]
-
-            X = (hstack([Xc[idx_c], Xs[idx_s]]).toarray()
-                if not use_transformer else
-                np.hstack([Xc[idx_c], Xs[idx_s]]))
-        else:
-            X = Xc if space == 'content' else Xs
-            common = (
-                df_lyric.groupby('author').apply(lambda x: x.name).index.tolist()
-                if use_transformer else author_texts['author'].tolist()
-            ) if space == 'content' else df_s.groupby('author').max().index.tolist()
-
+            texts = df.groupby('author')['song_text'].apply(' '.join).reset_index()
+            kwargs = {"max_features": 5000, "token_pattern": r"(?u)\b\w\w+\b"}
+            if remove_stopwords:
+                kwargs["stop_words"] = stop_words
+            tfidf = TfidfVectorizer(**kwargs)
+            X = tfidf.fit_transform(texts['song_text']).toarray()
+            authors = texts['author'].tolist()
         sim = cosine_similarity(X)
-        n = len(common)
-
+        n = len(authors)
         print("\n=== Per-Author Similarity Rankings ===")
-
-        biggest_diff=1
-        for i, author in enumerate(common):
-          
-            sims = [(common[j], sim[i, j]) for j in range(n) if j != i]
+        biggest_diff = 1.0
+        biggest_diff_author = ""
+        for i, author in enumerate(authors):
+            sims = [(authors[j], sim[i, j]) for j in range(n) if j != i]
             sims_sorted = sorted(sims, key=lambda x: x[1], reverse=True)
-
-            print(f"\n--- {author} ---")
             max_author, max_sim = sims_sorted[0]
             min_author, min_sim = sims_sorted[-1]
-            if min_sim<biggest_diff:
-                biggest_diff=min_sim
-                biggest_diff_author=f'Author {author} has the biggest differnece with {min_author} - {1-min_sim}'
+            if min_sim < biggest_diff:
+                biggest_diff = min_sim
+                biggest_diff_author = f'Author {author} has the biggest difference with {min_author} - {1 - min_sim:.4f}'
             biggest_drop = max_sim - min_sim
-
-            print(f"\n  Biggest similarity drop: {biggest_drop:.4f}")
-            print(f"    From most similar: {max_author} ({max_sim:.4f})")
-            print(f"    To least similar:  {min_author} ({min_sim:.4f})")
+            print(f"\n--- {author} ---")
+            print(f" Biggest similarity drop: {biggest_drop:.4f}")
+            print(f" From most similar: {max_author} ({max_sim:.4f})")
+            print(f" To least similar: {min_author} ({min_sim:.4f})")
         print(biggest_diff_author)
         print("\n=============================================\n")
-
         plt.figure(figsize=(10, 8))
         im = plt.imshow(sim, cmap=cmap, vmin=0, vmax=1)
         plt.colorbar(im, label='Cosine similarity')
-        plt.xticks(range(len(common)), common, rotation=90, fontsize=8)
-        plt.yticks(range(len(common)), common, fontsize=8)
-        plt.title(f'Author similarity ({space})')
+        plt.xticks(range(n), authors, rotation=90, fontsize=8)
+        plt.yticks(range(n), authors, fontsize=8)
+        title = 'Author similarity (transformer)' if use_transformer else 'Author similarity (TF-IDF)'
+        plt.title(title)
         plt.tight_layout()
         plt.show()
 
 
 
-# === USAGE ===
-if __name__ == "__main__":
-    viz = SongStyleVisualizer()
 
-    viz.plot_similarity_heatmap(use_transformer=False) 
-    # TF-IDF mode
-    #viz.distance_rank_correlation(max_author_songs=50, use_transformer=False)
-
-    # TRANSFORMER mode
-    #viz.distance_rank_correlation(max_author_songs=50, use_transformer=True)
-
-    #viz.compare_content_vs_style_similarity(top_k=5, max_author_songs=50, use_transformer=True)
-    #viz.compare_content_vs_style_similarity(top_k=5, max_author_songs=50, use_transformer=False)
-    #viz.plot_all_songs(use_pca=True, max_author_songs=20, use_transformer=True)
-    #viz.compare_author_representations()
