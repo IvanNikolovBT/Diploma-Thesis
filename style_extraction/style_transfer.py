@@ -23,6 +23,7 @@ import seaborn as sns
 import spacy
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from RAG_builder.vectorbuilder import VectorDBBuilder
+from rouge_score import rouge_scorer
 class StyleTransfer:
     
     def __init__(self):
@@ -697,26 +698,28 @@ class StyleTransfer:
             }
         )
         return response
-    def create_csv_with_bleu(self, input_csv, reference_col, generated_col):
-
-
+    def create_csv_with_bleu(self, input_csv):
         generated_csv = pd.read_csv(input_csv)
         generated_csv['bleu_score'] = None
 
         reference_df = self.df.set_index(['song_title', 'author'])
 
-        for i, row in tqdm(generated_csv.iterrows(), total=len(generated_csv), desc="Calculating BLEU"):
-            song_title = row.get('song_title')
-            author = row.get('author')
+        match_count = 0  # Counts how many reference matches were found
+
+        for i, gen_row in tqdm(generated_csv.iterrows(), total=len(generated_csv), desc="Calculating BLEU"):
+            gen_song = gen_row.get('song_title')
+            gen_author = gen_row.get('author')
+            gen_text = str(gen_row['new_song']).strip()
 
             try:
-                ref_text = reference_df.loc[(song_title, author), reference_col]
+                ref_text = reference_df.loc[(gen_song, gen_author), 'song_text']
+                if isinstance(ref_text, pd.Series):
+                    ref_text = ref_text.iloc[0]
+                match_count += 1
             except KeyError:
-                print(f"Warning: No reference found for '{song_title}' by '{author}'. Skipping.")
+                print(f"No reference found for '{gen_song}' by '{gen_author}'. Skipping row {i}.")
                 generated_csv.at[i, 'bleu_score'] = None
                 continue
-
-            gen_text = str(row[generated_col]).strip()
 
             if pd.notna(ref_text) and isinstance(ref_text, str) and pd.notna(gen_text) and isinstance(gen_text, str):
                 ref_tokens = [ref_text.split()]
@@ -727,9 +730,54 @@ class StyleTransfer:
             else:
                 generated_csv.at[i, 'bleu_score'] = None
 
+        print(f"Found {match_count} matching reference songs out of {len(generated_csv)} generated songs.")
+
         output_csv = f"{input_csv.rsplit('.', 1)[0]}_with_bleu.csv"
         generated_csv.to_csv(output_csv, index=False)
         print(f"✅ Saved BLEU scores to {output_csv}")
+
+        return output_csv
+    def create_csv_with_rouge(self, input_csv):
+        generated_csv = pd.read_csv(input_csv)
+        generated_csv['rouge_1'] = None
+        generated_csv['rouge_2'] = None
+        generated_csv['rouge_l'] = None
+
+        reference_df = self.df.set_index(['song_title', 'author'])
+
+        match_count = 0
+
+        scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+
+        for i, gen_row in tqdm(generated_csv.iterrows(), total=len(generated_csv), desc="Calculating ROUGE"):
+            gen_song = gen_row.get('song_title')
+            gen_author = gen_row.get('author')
+            gen_text = str(gen_row['new_song']).strip()
+
+            try:
+                ref_text = reference_df.loc[(gen_song, gen_author), 'song_text']
+                if isinstance(ref_text, pd.Series):
+                    ref_text = ref_text.iloc[0]
+                match_count += 1
+            except KeyError:
+                print(f"No reference found for '{gen_song}' by '{gen_author}'. Skipping row {i}.")
+                continue
+
+            if pd.notna(ref_text) and isinstance(ref_text, str) and pd.notna(gen_text) and isinstance(gen_text, str):
+                scores = scorer.score(ref_text, gen_text)
+                generated_csv.at[i, 'rouge_1'] = scores['rouge1'].fmeasure
+                generated_csv.at[i, 'rouge_2'] = scores['rouge2'].fmeasure
+                generated_csv.at[i, 'rouge_l'] = scores['rougeL'].fmeasure
+            else:
+                generated_csv.at[i, 'rouge_1'] = None
+                generated_csv.at[i, 'rouge_2'] = None
+                generated_csv.at[i, 'rouge_l'] = None
+
+        print(f"Found {match_count} matching reference songs out of {len(generated_csv)} generated songs.")
+
+        output_csv = f"{input_csv.rsplit('.', 1)[0]}_with_rouge.csv"
+        generated_csv.to_csv(output_csv, index=False)
+        print(f"✅ Saved ROUGE scores to {output_csv}")
 
         return output_csv
     def create_csv_with_perplexity(self,input_csv,column):
@@ -1035,8 +1083,10 @@ from datetime import datetime
 now = datetime.now()
 print("Current date and time:", now)
 #st.plot_perplexity_kde_only()
-st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer.csv','new_song')
-st.fill_csv(model='nova_1',mode=7)
+#st.create_csv_with_bleu('/home/ivan/Desktop/Diplomska/final_results_csv/all_songs_1_claude_example_idf_styles_with_perplexity.csv',)
+st.create_csv_with_rouge("/home/ivan/Desktop/Diplomska/final_results_csv/all_songs_1_claude_example_idf_styles_with_perplexity_with_bleu.csv")
+#st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer.csv','new_song')
+#st.fill_csv(model='nova',mode=7)
 #now = datetime.now()
 print("Current date and time:", now)    
 #3 1:24 - 6.22
