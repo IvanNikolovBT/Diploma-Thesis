@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import spacy
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from RAG_builder.vectorbuilder import VectorDBBuilder
 class StyleTransfer:
     
@@ -696,6 +697,41 @@ class StyleTransfer:
             }
         )
         return response
+    def create_csv_with_bleu(self, input_csv, reference_col, generated_col):
+
+
+        generated_csv = pd.read_csv(input_csv)
+        generated_csv['bleu_score'] = None
+
+        reference_df = self.df.set_index(['song_title', 'author'])
+
+        for i, row in tqdm(generated_csv.iterrows(), total=len(generated_csv), desc="Calculating BLEU"):
+            song_title = row.get('song_title')
+            author = row.get('author')
+
+            try:
+                ref_text = reference_df.loc[(song_title, author), reference_col]
+            except KeyError:
+                print(f"Warning: No reference found for '{song_title}' by '{author}'. Skipping.")
+                generated_csv.at[i, 'bleu_score'] = None
+                continue
+
+            gen_text = str(row[generated_col]).strip()
+
+            if pd.notna(ref_text) and isinstance(ref_text, str) and pd.notna(gen_text) and isinstance(gen_text, str):
+                ref_tokens = [ref_text.split()]
+                gen_tokens = gen_text.split()
+                smoothie = SmoothingFunction().method1
+                bleu = sentence_bleu(ref_tokens, gen_tokens, smoothing_function=smoothie)
+                generated_csv.at[i, 'bleu_score'] = bleu
+            else:
+                generated_csv.at[i, 'bleu_score'] = None
+
+        output_csv = f"{input_csv.rsplit('.', 1)[0]}_with_bleu.csv"
+        generated_csv.to_csv(output_csv, index=False)
+        print(f"✅ Saved BLEU scores to {output_csv}")
+
+        return output_csv
     def create_csv_with_perplexity(self,input_csv,column):
         
         df_input = pd.read_csv(input_csv)
