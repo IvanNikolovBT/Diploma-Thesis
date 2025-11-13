@@ -10,11 +10,11 @@ from sklearn.cluster import DBSCAN
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 from scipy.stats import spearmanr
-
+from scipy.spatial.distance import pdist
 import torch
 from transformers import AutoTokenizer, AutoModel
 from scipy.sparse import hstack
-from sklearn.preprocessing import normalize
+
 class SongStyleVisualizer:
     DEFAULT_CSV_PATH = "/home/ivan/Desktop/Diplomska/final_results_csv/cleaned_songs_with_perplexity.csv"
     DEFAULT_STYLE_CSV_PATH = "/home/ivan/Desktop/Diplomska/api_styles_all_in_one_text.csv"
@@ -255,145 +255,6 @@ class SongStyleVisualizer:
         scores[idx] = -1
         neighbors_idx = np.argsort(scores)[-k:][::-1]
         return [author_list[i] for i in neighbors_idx]
-    def compare_content_vs_style_similarity(self, top_k=5, max_author_songs=None, use_transformer=False):
-       
-        lyrics_sample = self._sample_per_author(self.lyrics_df, max_author_songs)
-        if use_transformer:
-            Xc = self._get_transformer_embeddings(lyrics_sample["song_text"].tolist())
-            df_c = pd.DataFrame(Xc, index=lyrics_sample["author"])
-            content_agg = df_c.groupby(level=0).mean().values
-        else:
-            author_texts = lyrics_sample.groupby("author")["song_text"].apply(" ".join).reset_index()
-            content_agg = TfidfVectorizer(max_features=5000).fit_transform(author_texts["song_text"]).toarray()
-
-        content_sim = cosine_similarity(content_agg)
-
-        
-        styles_sample = self._sample_per_author(self.styles_df, max_author_songs)
-        style_features = self._extract_style_features(styles_sample)
-        df_style = pd.DataFrame(style_features)
-        df_style["author"] = styles_sample["author"].values
-        style_agg = df_style.groupby("author").max().values
-        style_sim = cosine_similarity(style_agg)
-
-        
-        authors_c = author_texts["author"].tolist() if not use_transformer else lyrics_sample.groupby("author").apply(lambda x: x.name).index.tolist()
-        authors_s = df_style.groupby("author").max().index.tolist()
-        common = sorted(set(authors_c) & set(authors_s))
-        idx_c = [authors_c.index(a) for a in common]
-        idx_s = [authors_s.index(a) for a in common]
-        content_sim = content_sim[np.ix_(idx_c, idx_c)]
-        style_sim = style_sim[np.ix_(idx_s, idx_s)]
-
-
-
-        results = {}
-        overlaps = []
-        for author in common:
-            idx = common.index(author)
-            c_n = self._get_neighbors(content_sim, idx, top_k)
-            s_n = self._get_neighbors(style_sim, idx, top_k)
-            overlap = len(set(c_n) & set(s_n))
-            jaccard = overlap / (2 * top_k)
-            results[author] = {"content_neighbors": c_n, "style_neighbors": s_n, "overlap_count": overlap, "jaccard_alignment": jaccard}
-            overlaps.append(jaccard)
-
-        mean_j = np.mean(overlaps)
-        print(f"\nCONTENT ({'Transformer' if use_transformer else 'TF-IDF'}) vs STYLE – Top-{top_k} NN")
-        print(f"{'Author':<25} {'Overlap':<8} {'Jaccard':<8} NN → NN")
-        print("-" * 80)
-        for a in sorted(results, key=lambda x: results[x]["jaccard_alignment"], reverse=True):
-            r = results[a]
-            print(f"{a:<25} {r['overlap_count']:<8} {r['jaccard_alignment']:.3f} "
-                  f"{', '.join(r['content_neighbors'][:3])}{'...' if len(r['content_neighbors'])>3 else ''} → "
-                  f"{', '.join(r['style_neighbors'][:3])}{'...' if len(r['style_neighbors'])>3 else ''}")
-        print(f"\nMean Jaccard = {mean_j:.3f}")
-        return results, mean_j
-    def compare_author_representations(self, max_author_songs=None, use_transformer=True, n_components=50):
-
-
-
-
-        df_lyric = self._sample_per_author(self.lyrics_df, max_author_songs)
-        author_texts = df_lyric.groupby("author")["song_text"].apply(" ".join).reset_index()
-        authors = author_texts["author"].tolist()
-        n_authors = len(authors)
-
-        if n_authors < 2:
-            raise ValueError("Need ≥2 authors.")
-
-
-        X_tfidf = TfidfVectorizer(max_features=5000).fit_transform(author_texts["song_text"]).toarray()
-
-
-        if use_transformer:
-            print(f"Computing transformer embeddings for {n_authors} authors...")
-            X_trans = np.array([
-                self._get_transformer_embeddings(
-                    df_lyric[df_lyric["author"] == a]["song_text"].tolist()
-                ).mean(axis=0)
-                for a in authors
-            ])
-        else:
-            X_trans = X_tfidf
-
-
-        n_comp = min(n_components, n_authors - 1)
-
-        pca_tfidf = PCA(n_components=n_comp, random_state=42)
-        X_tfidf_pca = pca_tfidf.fit_transform(X_tfidf)
-        var_tfidf = pca_tfidf.explained_variance_ratio_.sum()
-
-        pca_trans = PCA(n_components=n_comp, random_state=42)
-        X_trans_pca = pca_trans.fit_transform(X_trans)
-        var_trans = pca_trans.explained_variance_ratio_.sum()
-
-
-        X_tfidf_pca = normalize(X_tfidf_pca)
-        X_trans_pca = normalize(X_trans_pca)
-
-
-        similarities = np.array([
-            cosine_similarity([X_tfidf_pca[i]], [X_trans_pca[i]])[0, 0]
-            for i in range(n_authors)
-        ])
-
-        mean_sim = np.mean(similarities)
-        std_sim = np.std(similarities)
-
-
-        print(f"\nTF-IDF vs TRANSFORMER (Separate PCA, {n_comp}D each)")
-        print(f"TF-IDF variance preserved : {var_tfidf:.1%}")
-        print(f"Transformer variance preserved: {var_trans:.1%}")
-        print(f"{'Author':<25} {'Cosine'}")
-        print("-" * 40)
-        for a, s in zip(authors, similarities):
-            print(f"{a:<25} {s:.3f}")
-        print(f"\nMean cosine = {mean_sim:.3f} ± {std_sim:.3f}")
-        if mean_sim > 0.7:
-            print("STRONG alignment")
-        elif mean_sim > 0.5:
-            print("MODERATE alignment")
-        else:
-            print("WEAK alignment")
-
-
-        plt.figure(figsize=(10, max(6, n_authors * 0.3)))
-        plt.barh(authors, similarities, color='steelblue')
-        plt.xlabel("Cosine Similarity (Separate PCA Space)")
-        plt.title(f"TF-IDF vs Transformer Alignment\n(Mean = {mean_sim:.3f})")
-        plt.xlim(0, 1)
-        plt.tight_layout()
-        plt.show()
-
-        return {
-            "authors": authors,
-            "similarities": similarities.tolist(),
-            "mean": float(mean_sim),
-            "tfidf_variance": float(var_tfidf),
-            "trans_variance": float(var_trans),
-            "n_components": n_comp
-        }
     def distance_rank_correlation(self, max_author_songs=None, use_transformer=False):
         df_lyric = self._sample_per_author(self.lyrics_df, max_author_songs)
         if use_transformer:
@@ -479,7 +340,107 @@ class SongStyleVisualizer:
         plt.title(title)
         plt.tight_layout()
         plt.show()
+    def _aggregate_author_embeddings(
+        self,
+        df: pd.DataFrame,
+        col:str,
+        max_author_songs: int | None,
+        use_transformer: bool,
+        tfidf_max_features: int = 5000
+    ) -> np.ndarray:
+
+        df_s = self._sample_per_author(df, max_author_songs)
+        authors = df_s["author"].unique()
+
+        if use_transformer:
+            embs = self._get_transformer_embeddings(df_s[col].tolist())
+            df_e = pd.DataFrame(embs, index=df_s["author"])
+            X = df_e.groupby(level=0).mean().reindex(authors).values
+        else:
+            txt = (
+                df_s.groupby("author")[col]
+                .apply(" ".join)
+                .reindex(authors)
+                .fillna("")
+            )
+            vec = TfidfVectorizer(max_features=tfidf_max_features)
+            X = vec.fit_transform(txt).toarray()
+
+        return X
+    
+    def compare_two_content_csvs(
+            self,
+            csv1_path: str,
+            csv2_path: str,
+            use_transformer: bool = False,
+            max_author_songs: int | None = None,
+            tfidf_max_features: int = 5000
+        ) -> tuple[float, float]:
+
+            df1 = pd.read_csv(csv1_path)
+            df2 = pd.read_csv(csv2_path)
+
+            X1 = self._aggregate_author_embeddings(
+                df1,'song_text',max_author_songs, use_transformer, tfidf_max_features
+            )
+            X2 = self._aggregate_author_embeddings(
+                df2,'new_song', max_author_songs, use_transformer, tfidf_max_features
+            )
 
 
+            authors1 = df1["author"].unique().tolist()
+            authors2 = df2["author"].unique().tolist()
+            common = sorted(set(authors1) & set(authors2))
+            if len(common) < 2:
+                raise ValueError(f"Only {len(common)} common authors – need ≥2.")
+
+            idx1 = [authors1.index(a) for a in common]
+            idx2 = [authors2.index(a) for a in common]
+
+            X1_aligned = X1[idx1]
+            X2_aligned = X2[idx2]
 
 
+            dist1 = pdist(X1_aligned, metric="cosine")
+            dist2 = pdist(X2_aligned, metric="cosine")
+
+            rho, p = spearmanr(dist1, dist2)
+
+            method = "Transformer" if use_transformer else "TF-IDF"
+            print(f"\nCOMPARE: {csv1_path.split('/')[-1]}  vs  {csv2_path.split('/')[-1]}")
+            print(f"   Method: {method}")
+            print(f"   Common authors: {len(common)}")
+            print(f"   Pairwise distances: {len(dist1)}")
+            print(f"   Spearman rho = {rho:.3f}  (p = {p:.2e})")
+            if rho > 0.5:
+                print("   -> Strong agreement")
+            elif rho > 0.2:
+                print("   -> Moderate agreement")
+            else:
+                print("   -> Weak agreement")
+
+            return rho, p
+
+import os
+test=SongStyleVisualizer()
+def get_bertscore_files_sorted(directory: str):
+
+    if not os.path.isdir(directory):
+        raise ValueError(f"Directory not found: {directory}")
+
+    files = [
+        os.path.join(directory, f)
+        for f in os.listdir(directory)
+        if f.endswith("bertscore.csv") and os.path.isfile(os.path.join(directory, f))
+    ]
+    
+    return sorted(files)   
+files= get_bertscore_files_sorted("/home/ivan/Desktop/Diplomska/final_results_csv")
+print('TF IDF COMPARISON')
+for file in files:
+    cleaned_csv='/home/ivan/Desktop/Diplomska/final_results_csv/cleaned_songs_with_perplexity.csv'
+    test.compare_two_content_csvs(cleaned_csv,file)
+print('MACEDONIZER COMPARISON')
+for file in files:
+    cleaned_csv='/home/ivan/Desktop/Diplomska/final_results_csv/cleaned_songs_with_perplexity.csv'
+    test.compare_two_content_csvs(cleaned_csv,file,use_transformer=True)
