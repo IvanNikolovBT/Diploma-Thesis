@@ -1,4 +1,4 @@
-author,song_title,styles_to_apply,name_of_new_song,new_song,input_tokens,output_tokens,total_tokens,ms,perplexity,bleu_score,rouge_1,rouge_2,rouge_l,bertscore_f1
+Wauthor,song_title,styles_to_apply,name_of_new_song,new_song,input_tokens,output_tokens,total_tokens,ms,perplexity,bleu_score,rouge_1,rouge_2,rouge_l,bertscore_f1
 Петре М. Андреевски,ПЕТТО ПИСМО,"Фигуративен јазик
 Фрагмент од реченица
 Долга реченица (run-on)
