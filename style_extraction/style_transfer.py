@@ -379,7 +379,7 @@ class StyleTransfer:
                 print(prompt)
                 return
             elif mode==7:
-                print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
+                print(f'Mode {mode}: model {model} idf + styles + example RAG 1200')
                 example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
                 
                 example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
@@ -394,7 +394,7 @@ class StyleTransfer:
                 print(prompt)
                 return
             elif mode==8:
-                print(f'Mode {mode}: model {model} idf + styles /+ example 1200')
+                print(f'Mode {mode}: model {model} idf + styles + example RAG macedonizer 1200')
                 example_song = self.extract_n_random_songs_for_author(row['author'], number_of_songs=1)
                 
                 example_song_text = "\n".join(map(str, example_song['song_text'].dropna()))
@@ -1083,10 +1083,10 @@ from datetime import datetime
 now = datetime.now()
 print("Current date and time:", now)
 #st.plot_perplexity_kde_only()
-current_csv='/home/ivan/Desktop/Diplomska/final_results_csv/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer_with_perplexity.csv'
-with_blue=st.create_csv_with_bleu(current_csv)
-print(with_blue)
-st.create_csv_with_rouge(with_blue)
+#current_csv='/home/ivan/Desktop/Diplomska/final_results_csv/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer_with_perplexity.csv'
+#with_blue=st.create_csv_with_bleu(current_csv)
+#print(with_blue)
+#st.create_csv_with_rouge(with_blue)
 #st.create_csv_with_perplexity('/home/ivan/Desktop/Diplomska/all_songs_9_nova_idf_styles_explanatory_dictionary_makedonizer.csv','new_song')
 #st.fill_csv(model='nova',mode=7)
 #now = datetime.now()
